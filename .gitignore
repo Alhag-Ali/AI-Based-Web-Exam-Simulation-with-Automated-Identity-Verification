@@ -1,0 +1,30 @@
+# 1. Bytecode und Cache
+# Kompilierte Python-Dateien, die automatisch erstellt werden
+__pycache__/
+*.pyc
+
+# 2. Virtuelle Umgebung
+# (Dies war Ihre Hauptfrage)
+venv/
+.venv/
+env/
+*.env
+
+# 3. Datenbank
+# Die lokale Entwicklungsdatenbank sollte nicht versioniert werden
+db.sqlite3
+*.sqlite3
+
+# 4. Geheime Daten (Environment Variables)
+# WICHTIG: Niemals Passwörter oder API-Keys zu Git hochladen
+.env
+.env.*
+
+# 5. IDE-Konfigurationsordner
+# Persönliche Einstellungen Ihres Code-Editors
+.vscode/
+.idea/
+
+# 6. Django Medien-Uploads
+# Dateien, die von Benutzern hochgeladen werden (falls zutreffend)
+media/
