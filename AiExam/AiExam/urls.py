@@ -21,4 +21,5 @@ from exam import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('upload_exam', views.upload_student_exam, name='api_upload_json'),
+    path('upload_exam_from_prof', views.upload_exam_from_prof)
 ]

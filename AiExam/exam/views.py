@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Exam
+from .models import Exam, SubjectExam
 import json
 
 @csrf_exempt
@@ -39,5 +39,34 @@ def upload_student_exam(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
-def send_exam_to_student(requist):  
-pfad_to_exam = "Project\AiExam\Exams_folder\ML_exam.json"
+def upload_exam_from_prof(request):
+    if request.method != "POST":
+        return JsonResponse({"error" : "Just POST requist is allowed"}, status=405)
+    
+    try:
+        upload_file = request.FILES.get("exam_from_Prof")
+        if not upload_file:
+            return JsonResponse({'error': 'No file in exam_from_Prof'})
+        
+        name = request.POST.get("name")
+        exam_datetime = request.POST.get("exam_datetime")
+        
+        # Validation Json File
+        try:
+            json.load(upload_file)
+            upload_file.seek(0)
+        except json.JSONDecodeError:
+            return JsonResponse({'error':'No valid JSON File'}, status=500)
+        
+        # Create a Model object a save the JSON file
+        new_file = SubjectExam(name=name,
+                               exam_datetime=exam_datetime,
+                               exam=upload_file
+        )
+        new_file.save()
+        
+        return JsonResponse({'Message':'Successfully upload.',
+                             'file_id': new_file.id},
+                            status=201)
+    except Exception as e:
+        return JsonResponse({'Error': str(e)}, status=500)
