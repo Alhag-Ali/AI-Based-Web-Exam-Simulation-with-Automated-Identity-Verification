@@ -1,7 +1,9 @@
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Exam, SubjectExam
+from django.shortcuts import get_object_or_404
+import os
 import json
 
 @csrf_exempt
@@ -70,3 +72,30 @@ def upload_exam_from_prof(request):
                             status=201)
     except Exception as e:
         return JsonResponse({'Error': str(e)}, status=500)
+
+@csrf_exempt
+def get_exam(request):
+    if request.method != "GET":
+        return JsonResponse({"error" : "Just get requist is allowed"}, status=405)
+    student_id = request.GET.get("student_id")
+    subject = request.GET.get("subject")
+                
+    if not student_id or not subject:
+        return JsonResponse({'error': 'Parameter student_id and subject are necessary'})
+    
+    try:
+        exam_record = get_object_or_404(
+            SubjectExam,
+            name__iexact=subject
+        )
+        
+    except ValueError:
+        return JsonResponse({'error': 'invalid subject'}, status=400)
+    
+    json_file = exam_record.exam
+    if not json_file:
+        return JsonResponse({'error': 'Datensatz gefunden, aber es ist keine JSON-Datei angehängt.'}, status=404)    
+    filename = f"Exam_{subject}_{student_id}.json"
+
+    return FileResponse(json_file.open('rb'), as_attachment=True, filename=filename)
+    
