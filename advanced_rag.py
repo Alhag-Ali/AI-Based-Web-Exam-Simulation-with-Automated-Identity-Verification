@@ -22,6 +22,13 @@ from langchain_groq import ChatGroq
 import getpass
 
 def read_file(file_path:str):
+    """
+    Reads the entire text content from a given file path.
+    This function opens a file from the specified path, reads its
+    entire content, and returns it as a single string.
+    It automatically handles opening and closing the file.
+    
+    """
     reader = PdfReader(file_path)
     print("Number of pages in this file", len(reader.pages))
     all_pages = "".join(page.extract_text() for page in reader.pages)
