@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 1. Bytecode und Cache
 # Kompilierte Python-Dateien, die automatisch erstellt werden
 __pycache__/
@@ -28,3 +29,14 @@ db.sqlite3
 # 6. Django Medien-Uploads
 # Dateien, die von Benutzern hochgeladen werden (falls zutreffend)
 media/
+=======
+AiExam/venv/
+AiExam/venv/
+__pycache__/
+*.so
+*.pyc
+*.pkl
+*.h5
+*.tflite
+*.onnx
+>>>>>>> a8f101f (Add my frontend + backend implementation)
