@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Webcam from "react-webcam";
 
-function JoinExam() {
+function JoinExam({ onJoined }) {
   const [exams, setExams] = useState([]);
+  const [loadError, setLoadError] = useState(null);
   const [selectedExam, setSelectedExam] = useState(null);
 
   const [step, setStep] = useState(1);
@@ -20,12 +21,20 @@ function JoinExam() {
 
   // 📘 Prüfungen laden
   useEffect(() => {
+    setLoadError(null);
     axios
       .get("http://127.0.0.1:8000/api/students/exams/", {
         headers: { Authorization: `Token ${token}` },
       })
       .then((res) => setExams(res.data))
-      .catch((err) => console.error("Exams laden fehlgeschlagen:", err));
+      .catch((err) => {
+        console.error("Exams laden fehlgeschlagen:", err);
+        const msg =
+          err?.response?.status === 401
+            ? "Nicht autorisiert – bitte erneut anmelden."
+            : "Fehler beim Laden der Prüfungen.";
+        setLoadError(msg);
+      });
   }, [token]);
 
   // Helper: DataURL -> Blob
@@ -114,6 +123,29 @@ function JoinExam() {
     }
   };
 
+  // 🆘 Hilfe anfordern (manuelle Prüfung)
+  const requestHelp = async () => {
+    if (!selectedExam) {
+      alert("Bitte zuerst eine Prüfung auswählen.");
+      return;
+    }
+    try {
+      const res = await axios.post(
+        "http://127.0.0.1:8000/api/students/help-request/",
+        {
+          exam_id: selectedExam.id,
+          message:
+            "Verifikation fehlgeschlagen oder problematisch. Bitte manuell prüfen.",
+        },
+        { headers: { Authorization: `Token ${token}` } }
+      );
+      alert(res.data?.message || "Der Anbieter wurde benachrichtigt.");
+    } catch (err) {
+      console.error(err);
+      alert("Konnte Hilfeanfrage nicht senden.");
+    }
+  };
+
   // 🧾 Prüfung beitreten
   const joinExam = async (examId) => {
     if (!verified) return;
@@ -124,8 +156,16 @@ function JoinExam() {
         {},
         { headers: { Authorization: `Token ${token}` } }
       );
-      alert(res.data.message || "Erfolgreich der Prüfung beigetreten!");
-      // Reset
+      const joinedMessage = res.data.message || "Erfolgreich der Prüfung beigetreten!";
+      // Optional: kurze Rückmeldung
+      console.log(joinedMessage);
+      // Direkt zur Prüfungsseite navigieren
+      const exam = exams.find((e) => e.id === examId) || selectedExam;
+      if (onJoined && exam) {
+        onJoined(exam);
+        return;
+      }
+      // Fallback: Reset wenn keine Navigation gewünscht
       setSelectedExam(null);
       setStep(1);
       setFaceDataUrl(null);
@@ -142,14 +182,26 @@ function JoinExam() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>📋 Prüfungen</h2>
-      <ul>
+    <div className="stack-lg">
+      <div className="section-title">
+        <span className="emoji">📝</span>
+        <h2 style={{ margin: 0 }}>Prüfungen</h2>
+      </div>
+      {loadError && <div className="card" style={{ borderColor: "rgba(239,68,68,.35)" }}>
+        <p style={{ margin: 0, color: "#fecaca" }}>{loadError}</p>
+      </div>}
+      {!loadError && exams.length === 0 && (
+        <div className="card muted-box"><p style={{ margin: 0 }} className="subtle">Keine Prüfungen gefunden.</p></div>
+      )}
+      <ul className="list stack">
         {exams.map((exam) => (
-          <li key={exam.id} style={{ marginBottom: 10 }}>
-            {exam.title} — {exam.date}
+          <li key={exam.id} className="list-item card">
+            <div className="stack">
+              <div style={{ fontWeight: 700 }}>{exam.title}</div>
+              <div className="subtle">{exam.date}</div>
+            </div>
             <button
-              style={{ marginLeft: 10 }}
+              className="btn secondary"
               onClick={() => {
                 setSelectedExam(exam);
                 resetFace();
@@ -163,12 +215,13 @@ function JoinExam() {
       </ul>
 
       {selectedExam && (
-        <div style={{ marginTop: 28 }}>
-          <h3>🧾 Identitätsprüfung für {selectedExam.title}</h3>
-          <p style={{ marginBottom: 14 }}>
-            Schritt 1️⃣ <b>Gesicht aufnehmen</b> → Schritt 2️⃣{" "}
-            <b>Ausweis aufnehmen</b> → Schritt 3️⃣ <b>Vergleichen</b>
-          </p>
+        <div className="panel" style={{ padding: 16, marginTop: 8 }}>
+          <div className="stack">
+            <h3 style={{ margin: 0 }}>🧾 Identitätsprüfung für {selectedExam.title}</h3>
+            <p className="subtle" style={{ margin: 0 }}>
+              Schritt 1️⃣ <b>Gesicht aufnehmen</b> → Schritt 2️⃣ <b>Ausweis aufnehmen</b> → Schritt 3️⃣ <b>Vergleichen</b>
+            </p>
+          </div>
 
           <Webcam
             ref={webcamRef}
@@ -180,56 +233,73 @@ function JoinExam() {
           />
 
           {/* Steuerung */}
-          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {step === 1 && <button onClick={captureFace}>📷 Gesicht aufnehmen</button>}
-            {step >= 2 && <button onClick={resetFace}>↩ Gesicht neu aufnehmen</button>}
-            {step === 2 && <button onClick={captureId}>🪪 Ausweis aufnehmen</button>}
-            {step >= 3 && <button onClick={resetId}>↩ Ausweis neu aufnehmen</button>}
+          <div className="btn-group" style={{ marginTop: 12 }}>
+            {step === 1 && <button className="btn" onClick={captureFace}>📷 Gesicht aufnehmen</button>}
+            {step >= 2 && <button className="btn secondary" onClick={resetFace}>↩ Gesicht neu aufnehmen</button>}
+            {step === 2 && <button className="btn" onClick={captureId}>🪪 Ausweis aufnehmen</button>}
+            {step >= 3 && <button className="btn secondary" onClick={resetId}>↩ Ausweis neu aufnehmen</button>}
             <button
+              className="btn warning"
               onClick={verifyNow}
               disabled={!faceDataUrl || !idDataUrl || verifying}
             >
               🔍 Vergleichen
             </button>
+            <button className="btn secondary" onClick={requestHelp} title="Provider um manuelle Prüfung bitten">
+              🆘 Hilfe anfordern
+            </button>
             <button
+              className={verified ? "btn success" : "btn secondary"}
               onClick={() => joinExam(selectedExam.id)}
               disabled={!verified || joining}
+              title={verified ? "Bereit – Identität bestätigt" : "Aktiviert nach erfolgreicher Verifikation"}
             >
-              ✅ Prüfung beitreten
+              <span className="row" style={{ alignItems: "center" }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    marginRight: 8,
+                    background: verified ? "#16a34a" : "rgba(255,255,255,.25)",
+                    boxShadow: verified ? "0 0 0 6px rgba(22,163,74,.18)" : "none"
+                  }}
+                />
+                {verified ? "✅ Prüfung beitreten" : "Prüfung beitreten"}
+              </span>
             </button>
           </div>
 
           {/* Vorschau */}
-          <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div className="row" style={{ marginTop: 16 }}>
             <Preview title="Gesicht" dataUrl={faceDataUrl} />
             <Preview title="Ausweis" dataUrl={idDataUrl} />
           </div>
 
           {/* Ergebnis */}
           <div style={{ marginTop: 16 }}>
-            {verifying && <p>⏳ Überprüfung läuft …</p>}
+            {verifying && <p className="subtle">⏳ Überprüfung läuft …</p>}
             {message && (
-              <p
-                style={{
-                  color: verified ? "green" : "crimson",
-                  fontWeight: 600,
-                  marginBottom: 8,
-                }}
-              >
-                {message}
-              </p>
+              <div className="card" style={{ borderColor: verified ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)" }}>
+                <div className="row" style={{ alignItems: "center" }}>
+                  <span
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 999,
+                      background: verified ? "#22c55e" : "#ef4444",
+                      boxShadow: verified ? "0 0 0 6px rgba(34,197,94,.15)" : "0 0 0 6px rgba(239,68,68,.15)"
+                    }}
+                  />
+                  <span style={{ fontWeight: 700, color: verified ? "#22c55e" : "#ef4444" }}>
+                    {message}
+                  </span>
+                </div>
+              </div>
             )}
 
             {details && (
-              <div
-                style={{
-                  background: "#f9fafb",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  padding: 10,
-                  fontSize: 13,
-                }}
-              >
+              <div className="card" style={{ fontSize: 13 }}>
                 <div
                   style={{
                     display: "flex",
@@ -243,7 +313,7 @@ function JoinExam() {
                   <Pill label="Gesichter matchen" ok={details.verified} />
                 </div>
                 {details.distance !== undefined && (
-                  <p style={{ margin: 0, color: "#374151" }}>
+                  <p style={{ margin: 0 }} className="subtle">
                     Distanz: <b>{details.distance?.toFixed(2)}</b> (Schwelle: {details.threshold})
                   </p>
                 )}
@@ -301,8 +371,13 @@ function Pill({ label, ok }) {
         padding: "4px 10px",
         borderRadius: 999,
         background: ok ? "#dcfce7" : "#fee2e2",
-        border: "1px solid #d1d5db",
+        border: ok ? "1px solid #bbf7d0" : "1px solid #fecaca",
         fontSize: 12.5,
+        color: ok ? "#166534" : "#991b1b",
+        fontWeight: 600,
+        boxShadow: ok
+          ? "0 4px 12px rgba(34,197,94,.18)"
+          : "0 4px 12px rgba(239,68,68,.18)",
       }}
     >
       {label}: {ok ? "✅" : "❌"}

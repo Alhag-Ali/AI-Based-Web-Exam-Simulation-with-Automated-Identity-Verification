@@ -19,40 +19,66 @@ function Login() {
         }
       );
 
-      console.log("Response:", res.data);
       localStorage.setItem("token", res.data.token);
       setMessage("Login erfolgreich!");
-      window.location.reload(); // Seite neu laden -> JoinExam wird gezeigt
+      window.location.reload();
     } catch (err) {
-      console.error("Login error:", err.response);
       setMessage("Fehler beim Login");
     }
   };
 
   return (
-    <div>
-      <h2>Studenten Login</h2>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="E-Mail"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Passwort"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        <button type="submit">Anmelden</button>
-      </form>
-      <p>{message}</p>
+    <div className="split">
+      <div className="panel card">
+        <div className="stack-lg">
+          <div className="section-title">
+            <span className="emoji">🔐</span>
+            <h2 style={{ margin: 0 }}>Studenten Login</h2>
+          </div>
+          <form className="form" onSubmit={handleSubmit}>
+            <div className="field">
+              <label className="subtle">E-Mail</label>
+              <input
+                className="input"
+                type="email"
+                placeholder="name@uni.de"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label className="subtle">Passwort</label>
+              <input
+                className="input"
+                type="password"
+                placeholder="Passwort"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="row">
+              <button className="btn" type="submit">Anmelden</button>
+              {message && <span className="subtle">{message}</span>}
+            </div>
+          </form>
+        </div>
+      </div>
+      <div className="muted-box card">
+        <div className="stack">
+          <div className="section-title">
+            <span className="emoji">💡</span>
+            <h3 style={{ margin: 0 }}>Hinweis</h3>
+          </div>
+          <p className="subtle" style={{ margin: 0 }}>
+            Melde dich mit deiner Unimail an. Nach dem Login kannst du einer
+            Prüfung beitreten und deine Identität verifizieren.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default Login;
-

@@ -6,6 +6,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
 
 from django.contrib.auth import authenticate
 from .models import Exam, ExamParticipation
@@ -14,6 +15,7 @@ from deepface import DeepFace
 import numpy as np
 import cv2
 import os
+import json
 
 # =======================================
 # 🔐 LOGIN VIEW
@@ -184,3 +186,57 @@ def verify_identity(request):
         "message": ("✅ Identität bestätigt." if verified else f"Gesichter stimmen nicht ausreichend überein (Distanz {distance:.2f})."),
         "hints": hints
     }, status=200)
+
+
+# =======================================
+# 🆘 Manual check request (Support)
+# =======================================
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def request_manual_check(request):
+    """
+    Student requests a manual identity review by the provider.
+    We append a JSON line into uploads/json/manual_checks.jsonl for later review.
+    """
+    exam_id = request.data.get("exam_id")
+    message = request.data.get("message", "")
+
+    if not exam_id:
+        return Response({"ok": False, "error": "exam_id required"}, status=400)
+
+    try:
+        exam = Exam.objects.get(id=exam_id)
+    except Exam.DoesNotExist:
+        return Response({"ok": False, "error": "Exam not found"}, status=404)
+
+    record = {
+        "timestamp": timezone.now().isoformat(),
+        "student_email": getattr(request.user, "email", None),
+        "student_id": getattr(request.user, "id", None),
+        "exam_id": exam.id,
+        "exam_title": exam.title,
+        "message": message,
+    }
+
+    folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "json")
+    # Fallback to project-level uploads if app-level uploads is not desired
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_uploads = os.path.join(os.path.dirname(project_root), "uploads", "json")
+    try_paths = [folder, project_uploads]
+    saved = False
+    for base in try_paths:
+        try:
+            os.makedirs(base, exist_ok=True)
+            path = os.path.join(base, "manual_checks.jsonl")
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            saved = True
+            break
+        except Exception as e:
+            print("manual check write error:", e)
+
+    if not saved:
+        # As last resort, just print to server log
+        print("MANUAL_CHECK_REQUEST", record)
+
+    return Response({"ok": True, "message": "Provider has been notified for manual review."}, status=200)
