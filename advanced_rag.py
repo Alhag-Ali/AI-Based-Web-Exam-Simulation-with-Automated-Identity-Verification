@@ -187,7 +187,7 @@ def RAG_System(all_pages:str, query:str, k_retrieval:int=3, k_rerank:int=3):
 
 if __name__=="__main__":
     text = read_file("AI_Material.pdf")
-    query = "Was is Convolutional Layer"
+    query = "Was is Deep Learning"
     RAG_run = RAG_System(text, query, k_retrieval=10, k_rerank=3)
     print(RAG_run)
     
