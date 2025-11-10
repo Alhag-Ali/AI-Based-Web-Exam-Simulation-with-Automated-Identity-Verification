@@ -1,0 +1,79 @@
+import React, { useEffect, useRef, useState } from "react";
+import Webcam from "react-webcam";
+import axios from "axios";
+
+const box = {
+  position: "absolute",
+  border: "2px dashed",
+  borderRadius: 8,
+  left: "5%",
+  width: "90%",
+};
+
+export default function LiveVerification() {
+  const webcamRef = useRef(null);
+  const [result, setResult] = useState(null);
+  const [running, setRunning] = useState(true);
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    if (!running) return;
+    const interval = setInterval(async () => {
+      const dataUrl = webcamRef.current?.getScreenshot();
+      if (!dataUrl) return;
+      const blob = await (await fetch(dataUrl)).blob();
+      const form = new FormData();
+      form.append("frame", blob, "frame.jpg");
+
+      try {
+        const res = await axios.post("http://127.0.0.1:8000/api/students/live-verify/", form, {
+          headers: {
+            Authorization: `Token ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        setResult(res.data);
+        if (res.data.verified) setRunning(false);
+      } catch (e) {
+        console.error(e);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [running, token]);
+
+  return (
+    <div style={{ padding: 16 }}>
+      <h2>Live-Verifikation</h2>
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <Webcam
+          ref={webcamRef}
+          audio={false}
+          screenshotFormat="image/jpeg"
+          width={480}
+          height={360}
+          videoConstraints={{ facingMode: "user" }}
+        />
+        {/* Gesicht mittig */}
+        <div style={{ ...box, top: "10%", height: "45%" }} />
+        {/* Ausweis unten */}
+        <div style={{ ...box, bottom: "5%", height: "25%" }} />
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <p>Halte dein Gesicht in das obere Feld und den Ausweis in das untere Feld.</p>
+        {result && (
+          <div style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+            <strong>verified:</strong> {String(result.verified)}{"\n"}
+            <strong>faces_verified:</strong> {String(result.faces_verified)} dist={result.face_distance}{"\n"}
+            <strong>id_face_detected:</strong> {String(result.id_face_detected)}{"\n"}
+            <strong>name_match:</strong> {String(result?.db_compare?.name_match)}{"\n"}
+            <strong>matriculation_match:</strong> {String(result?.db_compare?.matriculation_match)}{"\n"}
+            <strong>ocr_text_sample:</strong> {result.ocr_text_sample}
+          </div>
+        )}
+        {!running && result?.verified && <p style={{ color: "green" }}>✅ Identität bestätigt – weiter zur Prüfung!</p>}
+      </div>
+    </div>
+  );
+}
+
