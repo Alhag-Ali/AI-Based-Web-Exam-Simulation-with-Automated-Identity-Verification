@@ -1,7 +1,7 @@
-pip install langchain-text-splitters langchain-community sentence-transformers chromadb
-pip install pypdf
-pip install -U sentence-transformers
-pip install -U langchain-groq
+# pip install langchain-text-splitters langchain-community sentence-transformers chromadb
+# pip install pypdf
+# pip install -U sentence-transformers
+# pip install -U langchain-groq
 
 from pypdf import PdfReader
 
@@ -193,7 +193,7 @@ def RAG_System(all_pages:str, query:str, k_retrieval:int=3, k_rerank:int=3):
     return final_question
 
 if __name__=="__main__":
-    text = read_file("AI_Material.pdf")
+    text = read_file("AI_Matrial.pdf")
     query = "Was is Deep Learning"
     RAG_run = RAG_System(text, query, k_retrieval=10, k_rerank=3)
     print(RAG_run)
@@ -209,4 +209,4 @@ if __name__=="__main__":
     # C) Ein Verfahren zur Optimierung von Lieferketten und Finanzhandelsstrategien.  
     # D) Ein neuronales Netzwerk, das nur aus einer einzigen Schicht besteht.
 
-    # **Korrekte Antwort:** B
+    # **Korrekte Antwort: B**
