@@ -1,21 +1,58 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Login from "./Login";
 import JoinExam from "./JoinExam";
 import ExamPage from "./ExamPage";
+import CreateExam from "./CreateExam";
+import axios from "axios";
 import "./App.css";
 
 function App() {
   const token = localStorage.getItem("token");
   const [currentExam, setCurrentExam] = useState(null);
+  const [isStaff, setIsStaff] = useState(false);
+  const [viewMode, setViewMode] = useState("student"); // "student" or "staff"
+  const [loading, setLoading] = useState(true);
+
+  // Check if user is staff and set initial view mode
+  useEffect(() => {
+    if (token) {
+      const savedIsStaff = localStorage.getItem("isStaff");
+      if (savedIsStaff === "true") {
+        setIsStaff(true);
+        setViewMode("staff");
+      } else {
+        setIsStaff(false);
+        setViewMode("student");
+      }
+
+      // Verify staff status from backend
+      axios
+        .get("http://127.0.0.1:8000/api/students/exams/", {
+          headers: { Authorization: `Token ${token}` },
+        })
+        .then(() => {
+          setLoading(false);
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, [token]);
 
   if (!token) {
     return <div className="container"><Login /></div>;
   }
 
+  if (loading) {
+    return <div className="container"><div className="card">Lade...</div></div>;
+  }
+
   if (currentExam) {
     return (
       <div>
-        <TopBar />
+        <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} />
         <div className="container">
           <ExamPage exam={currentExam} onExit={() => setCurrentExam(null)} />
         </div>
@@ -25,9 +62,15 @@ function App() {
 
   return (
     <div>
-      <TopBar />
+      <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} />
       <div className="container">
-        <JoinExam onJoined={(exam) => setCurrentExam(exam)} />
+        {viewMode === "staff" ? (
+          <CreateExam onCreated={(exam) => {
+            alert(`Prüfung "${exam.title}" erfolgreich erstellt! Du kannst jetzt Fragen hochladen.`);
+          }} />
+        ) : (
+          <JoinExam onJoined={(exam) => setCurrentExam(exam)} />
+        )}
       </div>
     </div>
   );
@@ -35,7 +78,7 @@ function App() {
 
 export default App;
 
-function TopBar() {
+function TopBar({ isStaff, viewMode, onViewModeChange }) {
   const logout = () => {
     localStorage.removeItem("token");
     window.location.reload();
@@ -47,8 +90,26 @@ function TopBar() {
           <div className="logo" />
           <div>AI Exam</div>
         </div>
-        <div className="row">
-          <span className="badge">Student</span>
+        <div className="row" style={{ gap: 12, alignItems: "center" }}>
+          {isStaff && (
+            <div className="btn-group" style={{ margin: 0 }}>
+              <button
+                className={viewMode === "student" ? "btn" : "btn secondary"}
+                onClick={() => onViewModeChange("student")}
+                style={{ fontSize: 14, padding: "6px 12px" }}
+              >
+                📝 Student
+              </button>
+              <button
+                className={viewMode === "staff" ? "btn" : "btn secondary"}
+                onClick={() => onViewModeChange("staff")}
+                style={{ fontSize: 14, padding: "6px 12px" }}
+              >
+                👨‍🏫 Professor
+              </button>
+            </div>
+          )}
+          <span className="badge">{viewMode === "staff" ? "Professor" : "Student"}</span>
           <button className="btn secondary" onClick={logout}>Abmelden</button>
         </div>
       </div>

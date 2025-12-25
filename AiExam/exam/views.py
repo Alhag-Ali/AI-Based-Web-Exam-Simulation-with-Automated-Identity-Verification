@@ -16,6 +16,7 @@ import numpy as np
 import cv2
 import os
 import json
+import uuid
 
 # =======================================
 # 🔐 LOGIN VIEW
@@ -41,7 +42,10 @@ class LoginView(APIView):
             )
 
         token, _ = Token.objects.get_or_create(user=user)
-        return Response({"token": token.key}, status=status.HTTP_200_OK)
+        return Response({
+            "token": token.key,
+            "is_staff": user.is_staff
+        }, status=status.HTTP_200_OK)
 
 
 # =======================================
@@ -52,8 +56,68 @@ class ExamListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        exams = Exam.objects.all().values("id", "title", "date", "description")
-        return Response(list(exams), status=status.HTTP_200_OK)
+        """
+        Get exams:
+        - Students see all exams
+        - Staff/Professors see only exams they created
+        """
+        if request.user.is_staff:
+            # Professoren sehen nur ihre eigenen Prüfungen
+            exam_queryset = Exam.objects.filter(created_by=request.user)
+        else:
+            # Studenten sehen alle Prüfungen
+            exam_queryset = Exam.objects.all()
+        
+        exams = []
+        for exam in exam_queryset:
+            exams.append({
+                "id": exam.id,
+                "title": exam.title,
+                "date": exam.date.isoformat() if exam.date else None,
+                "description": exam.description or ""
+            })
+        
+        return Response(exams, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """
+        Create a new exam. Only staff/superusers can create exams.
+        """
+        if not request.user.is_staff:
+            return Response(
+                {"error": "Only staff members can create exams."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        title = request.data.get("title")
+        date_str = request.data.get("date")
+        description = request.data.get("description", "")
+
+        if not title or not date_str:
+            return Response(
+                {"error": "Title and date are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            from django.utils.dateparse import parse_datetime
+            exam_date = parse_datetime(date_str)
+            if not exam_date:
+                exam_date = timezone.now()
+        except:
+            exam_date = timezone.now()
+
+        exam = Exam.objects.create(
+            title=title,
+            date=exam_date,
+            description=description,
+            created_by=request.user  # Speichere den Ersteller
+        )
+
+        return Response(
+            {"id": exam.id, "title": exam.title, "date": exam.date, "description": exam.description},
+            status=status.HTTP_201_CREATED
+        )
 
 
 # =======================================
@@ -115,12 +179,10 @@ def verify_identity(request):
     try:
         live_faces = DeepFace.extract_faces(live_bgr, detector_backend=DETECTOR)
     except Exception as e:
-        print("extract_faces(live) error:", e)
         live_faces = []
     try:
         id_faces = DeepFace.extract_faces(id_bgr, detector_backend=DETECTOR)
     except Exception as e:
-        print("extract_faces(id) error:", e)
         id_faces = []
 
     if len(live_faces) == 0:
@@ -158,15 +220,10 @@ def verify_identity(request):
             enforce_detection=False   # Detection haben wir vorher erledigt
         )
     except Exception as e:
-        print("verify error:", e)
         return Response({"verified": False, "message": f"Fehler beim Vergleich: {e}"}, status=500)
 
     distance = float(result.get("distance", 1.0))
     verified = distance <= MATCH_THRESHOLD
-
-    # Debug im Server-Log
-    print(f"[verify_identity] model={MODEL} dist={distance:.4f} thr={MATCH_THRESHOLD} -> verified={verified}")
-    print("live bbox:", live_faces_sorted[0]["facial_area"], " | id bbox:", id_faces_sorted[0]["facial_area"])
 
     hints = []
     if not verified:
@@ -221,18 +278,24 @@ class ExamQuestionsView(APIView):
         # Try to load questions from JSON files
         questions = []
         
-        # Possible paths to check
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        exam_title_normalized = exam.title.replace(' ', '_')
+        exam_title_lower = exam_title_normalized.lower()
+        exam_title_parts = exam.title.split()
+        exam_first_part = exam_title_parts[0] if exam_title_parts else exam.title
+        
         possible_paths = [
-            os.path.join(base_dir, "Exams_folder", f"{exam.title.replace(' ', '_')}_exam.json"),
+            os.path.join(base_dir, "Exams_folder", f"{exam_first_part}_exam.json"),
+            os.path.join(base_dir, "Exams_folder", f"{exam_title_normalized}exam.json"),
+            os.path.join(base_dir, "Exams_folder", f"{exam_title_lower}exam.json"),
+            os.path.join(base_dir, "Exams_folder", f"{exam_title_normalized}_exam.json"),
+            os.path.join(base_dir, "Exams_folder", f"{exam_title_lower}_exam.json"),
+            os.path.join(base_dir, "Exams_folder", f"{exam_title_normalized}.json"),
+            os.path.join(base_dir, "Exams_folder", f"{exam_title_lower}.json"),
+            os.path.join(base_dir, "uploads", "exams", f"exam_from_Prof_{exam.id}.json"),
             os.path.join(base_dir, "uploads", "exams", f"exam_from_Prof.json"),
             os.path.join(base_dir, "uploads", "json", "exam.json"),
         ]
-        
-        # Also try with exam ID in filename
-        possible_paths.extend([
-            os.path.join(base_dir, "uploads", "exams", f"exam_from_Prof_{exam.id}.json"),
-        ])
 
         for json_path in possible_paths:
             if os.path.exists(json_path):
@@ -240,41 +303,33 @@ class ExamQuestionsView(APIView):
                     with open(json_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         
-                        # Handle different JSON structures
                         if isinstance(data, list):
-                            # If it's a list of questions
                             questions = data
                         elif isinstance(data, dict):
-                            # If it's a single question object
                             if "questions" in data:
                                 questions = data["questions"]
                             elif "question" in data or "Question" in data:
-                                # Single question, wrap in array
                                 q_text = data.get("question") or data.get("Question", "")
                                 q_answer = data.get("answer") or data.get("Answer", "")
                                 questions = [{
                                     "text": q_text,
                                     "answer": q_answer,
-                                    "options": []  # No options for this structure
+                                    "options": []
                                 }]
                             elif any(key.lower() in ["text", "question"] for key in data.keys()):
-                                # Try to find question-like keys
                                 questions = [data]
                         
                         if questions:
                             break
                 except Exception as e:
-                    print(f"Error loading questions from {json_path}: {e}")
                     continue
 
-        # If no questions found, return empty array
         if not questions:
             return Response(
                 {"questions": [], "message": "No questions found for this exam."},
                 status=status.HTTP_200_OK
             )
 
-        # Normalize question format
         normalized_questions = []
         for q in questions:
             if isinstance(q, str):
@@ -288,6 +343,95 @@ class ExamQuestionsView(APIView):
                 normalized_questions.append(normalized_q)
 
         return Response({"questions": normalized_questions}, status=status.HTTP_200_OK)
+
+
+# =======================================
+# 📤 UPLOAD EXAM QUESTIONS (JSON)
+# =======================================
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def upload_exam_questions(request, exam_id):
+    """
+    Upload exam questions as JSON file. Only staff can upload.
+    """
+    if not request.user.is_staff:
+        return Response(
+            {"error": "Only staff members can upload exam questions."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        exam = Exam.objects.get(id=exam_id)
+    except Exam.DoesNotExist:
+        return Response(
+            {"error": "Exam not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    json_file = request.FILES.get("exam_file")
+    if not json_file:
+        return Response(
+            {"error": "No file provided. Please upload a JSON file."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate file extension
+    if not json_file.name.endswith('.json'):
+        return Response(
+            {"error": "File must be a JSON file."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Save file to uploads/exams directory
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    upload_dir = os.path.join(base_dir, "uploads", "exams")
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Generate unique filename
+    filename = f"exam_from_Prof_{exam.id}_{uuid.uuid4().hex[:8]}.json"
+    file_path = os.path.join(upload_dir, filename)
+
+    try:
+        # Save uploaded file
+        with open(file_path, 'wb+') as destination:
+            for chunk in json_file.chunks():
+                destination.write(chunk)
+
+        # Validate JSON structure
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            # Basic validation - should be dict or list
+            if not isinstance(data, (dict, list)):
+                os.remove(file_path)
+                return Response(
+                    {"error": "Invalid JSON structure. Expected object or array."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        return Response(
+            {
+                "message": "Exam questions uploaded successfully.",
+                "filename": filename,
+                "exam_id": exam.id,
+                "exam_title": exam.title
+            },
+            status=status.HTTP_200_OK
+        )
+    except json.JSONDecodeError:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        return Response(
+            {"error": "Invalid JSON file."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        return Response(
+            {"error": f"Error uploading file: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 # =======================================
@@ -335,10 +479,9 @@ def request_manual_check(request):
             saved = True
             break
         except Exception as e:
-            print("manual check write error:", e)
+            pass
 
     if not saved:
-        # As last resort, just print to server log
-        print("MANUAL_CHECK_REQUEST", record)
+        pass
 
     return Response({"ok": True, "message": "Provider has been notified for manual review."}, status=200)

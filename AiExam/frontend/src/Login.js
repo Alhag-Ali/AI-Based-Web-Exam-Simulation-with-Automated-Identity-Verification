@@ -8,6 +8,7 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setMessage("");
     try {
       const res = await axios.post(
         "http://127.0.0.1:8000/api/students/login/",
@@ -20,10 +21,13 @@ function Login() {
       );
 
       localStorage.setItem("token", res.data.token);
+      localStorage.setItem("isStaff", res.data.is_staff ? "true" : "false");
       setMessage("Login erfolgreich!");
-      window.location.reload();
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (err) {
-      setMessage("Fehler beim Login");
+      setMessage(err.response?.data?.error || "Fehler beim Login");
     }
   };
 
@@ -33,8 +37,9 @@ function Login() {
         <div className="stack-lg">
           <div className="section-title">
             <span className="emoji">🔐</span>
-            <h2 style={{ margin: 0 }}>Studenten Login</h2>
+            <h2 style={{ margin: 0 }}>Anmeldung</h2>
           </div>
+
           <form className="form" onSubmit={handleSubmit}>
             <div className="field">
               <label className="subtle">E-Mail</label>
@@ -59,9 +64,15 @@ function Login() {
               />
             </div>
             <div className="row">
-              <button className="btn" type="submit">Anmelden</button>
-              {message && <span className="subtle">{message}</span>}
+              <button className="btn" type="submit">
+                Anmelden
+              </button>
             </div>
+            {message && (
+              <div className={`card ${message.includes("erfolgreich") ? "success-box" : "error-box"}`} style={{ marginTop: 12 }}>
+                <p style={{ margin: 0 }}>{message}</p>
+              </div>
+            )}
           </form>
         </div>
       </div>
@@ -72,8 +83,8 @@ function Login() {
             <h3 style={{ margin: 0 }}>Hinweis</h3>
           </div>
           <p className="subtle" style={{ margin: 0 }}>
-            Melde dich mit deiner Unimail an. Nach dem Login kannst du einer
-            Prüfung beitreten und deine Identität verifizieren.
+            Melde dich mit deiner Unimail an. Das System erkennt automatisch,
+            ob du Student oder Professor bist.
           </p>
         </div>
       </div>
