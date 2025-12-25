@@ -189,6 +189,108 @@ def verify_identity(request):
 
 
 # =======================================
+# 📝 GET EXAM QUESTIONS
+# =======================================
+class ExamQuestionsView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, exam_id):
+        """
+        Get questions for an exam. Only accessible if student has joined the exam.
+        Tries to load from JSON files in Exams_folder or uploads/exams.
+        """
+        student = request.user
+        try:
+            exam = Exam.objects.get(id=exam_id)
+        except Exam.DoesNotExist:
+            return Response(
+                {"error": "Exam not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if student has joined the exam
+        try:
+            ExamParticipation.objects.get(student=student, exam=exam)
+        except ExamParticipation.DoesNotExist:
+            return Response(
+                {"error": "You must join the exam first."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Try to load questions from JSON files
+        questions = []
+        
+        # Possible paths to check
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        possible_paths = [
+            os.path.join(base_dir, "Exams_folder", f"{exam.title.replace(' ', '_')}_exam.json"),
+            os.path.join(base_dir, "uploads", "exams", f"exam_from_Prof.json"),
+            os.path.join(base_dir, "uploads", "json", "exam.json"),
+        ]
+        
+        # Also try with exam ID in filename
+        possible_paths.extend([
+            os.path.join(base_dir, "uploads", "exams", f"exam_from_Prof_{exam.id}.json"),
+        ])
+
+        for json_path in possible_paths:
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        
+                        # Handle different JSON structures
+                        if isinstance(data, list):
+                            # If it's a list of questions
+                            questions = data
+                        elif isinstance(data, dict):
+                            # If it's a single question object
+                            if "questions" in data:
+                                questions = data["questions"]
+                            elif "question" in data or "Question" in data:
+                                # Single question, wrap in array
+                                q_text = data.get("question") or data.get("Question", "")
+                                q_answer = data.get("answer") or data.get("Answer", "")
+                                questions = [{
+                                    "text": q_text,
+                                    "answer": q_answer,
+                                    "options": []  # No options for this structure
+                                }]
+                            elif any(key.lower() in ["text", "question"] for key in data.keys()):
+                                # Try to find question-like keys
+                                questions = [data]
+                        
+                        if questions:
+                            break
+                except Exception as e:
+                    print(f"Error loading questions from {json_path}: {e}")
+                    continue
+
+        # If no questions found, return empty array
+        if not questions:
+            return Response(
+                {"questions": [], "message": "No questions found for this exam."},
+                status=status.HTTP_200_OK
+            )
+
+        # Normalize question format
+        normalized_questions = []
+        for q in questions:
+            if isinstance(q, str):
+                normalized_questions.append({"text": q, "options": []})
+            elif isinstance(q, dict):
+                normalized_q = {
+                    "text": q.get("text") or q.get("question") or q.get("Question") or "Question",
+                    "options": q.get("options") or q.get("Options") or [],
+                    "answer": q.get("answer") or q.get("Answer") or q.get("correct_answer"),
+                }
+                normalized_questions.append(normalized_q)
+
+        return Response({"questions": normalized_questions}, status=status.HTTP_200_OK)
+
+
+# =======================================
 # 🆘 Manual check request (Support)
 # =======================================
 @api_view(['POST'])

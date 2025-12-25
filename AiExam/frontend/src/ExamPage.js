@@ -6,19 +6,26 @@ function ExamPage({ exam, onExit }) {
   const token = localStorage.getItem("token");
 
   useEffect(() => {
-    // Placeholder: try to fetch questions if a future endpoint exists.
-    // Falls es keinen Endpoint gibt, zeigen wir einen Hinweis und ggf. laden aus JSON später.
     const fetchQuestions = async () => {
       try {
         const res = await axios.get(`http://127.0.0.1:8000/api/students/exams/${exam.id}/questions/`, {
           headers: { Authorization: `Token ${token}` }
         });
-        setQuestions(res.data);
-      } catch (_e) {
-        setQuestions([]);
+        // Backend returns { questions: [...] }
+        setQuestions(res.data.questions || res.data || []);
+      } catch (err) {
+        console.error("Error loading questions:", err);
+        if (err.response?.status === 403) {
+          setQuestions([]);
+          alert("Bitte trete zuerst der Prüfung bei!");
+        } else {
+          setQuestions([]);
+        }
       }
     };
-    fetchQuestions();
+    if (exam?.id) {
+      fetchQuestions();
+    }
   }, [exam?.id, token]);
 
   return (
@@ -43,12 +50,17 @@ function ExamPage({ exam, onExit }) {
           {questions.map((q, idx) => (
             <li key={idx} className="card">
               <div style={{ fontWeight: 700, marginBottom: 6 }}>{q.text || q.question || `Frage ${idx + 1}`}</div>
-              {Array.isArray(q.options) && (
-                <ul>
+              {Array.isArray(q.options) && q.options.length > 0 && (
+                <ul style={{ marginTop: 8, paddingLeft: 20 }}>
                   {q.options.map((opt, i) => (
-                    <li key={i}>{opt}</li>
+                    <li key={i} style={{ marginBottom: 4 }}>{opt}</li>
                   ))}
                 </ul>
+              )}
+              {q.answer && (
+                <div className="subtle" style={{ marginTop: 8, fontStyle: "italic" }}>
+                  Antwort: {q.answer}
+                </div>
               )}
             </li>
           ))}
