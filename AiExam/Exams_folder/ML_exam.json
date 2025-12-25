@@ -1,1 +1,44 @@
-{"What is ML": "Machine Learning"}
+{
+  "questions": [
+    {
+      "text": "Was ist Machine Learning?",
+      "options": [
+        "Eine Methode zur Datenanalyse",
+        "Ein Teilgebiet der künstlichen Intelligenz",
+        "Eine Programmiersprache",
+        "Ein Betriebssystem"
+      ],
+      "answer": "Ein Teilgebiet der künstlichen Intelligenz"
+    },
+    {
+      "text": "Welcher Algorithmus wird für Klassifikation verwendet?",
+      "options": [
+        "K-Means",
+        "Support Vector Machine (SVM)",
+        "Apriori",
+        "DBSCAN"
+      ],
+      "answer": "Support Vector Machine (SVM)"
+    },
+    {
+      "text": "Was ist Overfitting?",
+      "options": [
+        "Das Modell lernt zu gut auf Trainingsdaten",
+        "Das Modell ist zu einfach",
+        "Das Modell hat zu wenig Daten",
+        "Das Modell verwendet zu viele Features"
+      ],
+      "answer": "Das Modell lernt zu gut auf Trainingsdaten"
+    },
+    {
+      "text": "Was ist der Unterschied zwischen Supervised und Unsupervised Learning?",
+      "options": [
+        "Supervised Learning verwendet Labels, Unsupervised nicht",
+        "Unsupervised Learning ist schneller",
+        "Supervised Learning benötigt mehr Daten",
+        "Es gibt keinen Unterschied"
+      ],
+      "answer": "Supervised Learning verwendet Labels, Unsupervised nicht"
+    }
+  ]
+}
