@@ -10,10 +10,9 @@ function App() {
   const token = localStorage.getItem("token");
   const [currentExam, setCurrentExam] = useState(null);
   const [isStaff, setIsStaff] = useState(false);
-  const [viewMode, setViewMode] = useState("student"); // "student" or "staff"
+  const [viewMode, setViewMode] = useState("student");
   const [loading, setLoading] = useState(true);
 
-  // Check if user is staff and set initial view mode
   useEffect(() => {
     if (token) {
       const savedIsStaff = localStorage.getItem("isStaff");
@@ -25,7 +24,6 @@ function App() {
         setViewMode("student");
       }
 
-      // Verify staff status from backend
       axios
         .get("http://127.0.0.1:8000/api/students/exams/", {
           headers: { Authorization: `Token ${token}` },
@@ -91,24 +89,6 @@ function TopBar({ isStaff, viewMode, onViewModeChange }) {
           <div>AI Exam</div>
         </div>
         <div className="row" style={{ gap: 12, alignItems: "center" }}>
-          {isStaff && (
-            <div className="btn-group" style={{ margin: 0 }}>
-              <button
-                className={viewMode === "student" ? "btn" : "btn secondary"}
-                onClick={() => onViewModeChange("student")}
-                style={{ fontSize: 14, padding: "6px 12px" }}
-              >
-                📝 Student
-              </button>
-              <button
-                className={viewMode === "staff" ? "btn" : "btn secondary"}
-                onClick={() => onViewModeChange("staff")}
-                style={{ fontSize: 14, padding: "6px 12px" }}
-              >
-                👨‍🏫 Professor
-              </button>
-            </div>
-          )}
           <span className="badge">{viewMode === "staff" ? "Professor" : "Student"}</span>
           <button className="btn secondary" onClick={logout}>Abmelden</button>
         </div>

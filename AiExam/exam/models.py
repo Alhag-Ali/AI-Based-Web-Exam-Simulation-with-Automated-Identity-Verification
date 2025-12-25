@@ -39,6 +39,7 @@ class Exam(models.Model):
     title = models.CharField(max_length=100)
     date = models.DateTimeField()
     description = models.TextField(blank=True)
+    duration_minutes = models.IntegerField(default=60, help_text="Prüfungsdauer in Minuten")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

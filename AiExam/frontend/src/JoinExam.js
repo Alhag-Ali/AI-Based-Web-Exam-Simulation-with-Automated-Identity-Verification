@@ -19,7 +19,6 @@ function JoinExam({ onJoined }) {
   const webcamRef = useRef(null);
   const token = localStorage.getItem("token");
 
-  // 📘 Prüfungen laden
   useEffect(() => {
     setLoadError(null);
     axios
@@ -37,13 +36,11 @@ function JoinExam({ onJoined }) {
       });
   }, [token]);
 
-  // Helper: DataURL -> Blob
   const dataUrlToBlob = async (dataUrl) => {
     const res = await fetch(dataUrl);
     return await res.blob();
   };
 
-  // 📷 Gesicht aufnehmen
   const captureFace = () => {
     const shot = webcamRef.current?.getScreenshot();
     if (!shot) return;
@@ -54,7 +51,6 @@ function JoinExam({ onJoined }) {
     setStep(2);
   };
 
-  // 🪪 Ausweis aufnehmen
   const captureId = () => {
     const shot = webcamRef.current?.getScreenshot();
     if (!shot) return;
@@ -65,7 +61,6 @@ function JoinExam({ onJoined }) {
     setStep(3);
   };
 
-  // 🔄 Schritte zurücksetzen
   const resetFace = () => {
     setFaceDataUrl(null);
     setVerified(false);
@@ -82,7 +77,6 @@ function JoinExam({ onJoined }) {
     setStep(2);
   };
 
-  // 🧠 Verifikation starten
   const verifyNow = async () => {
     if (!faceDataUrl || !idDataUrl) return;
     setVerifying(true);
@@ -123,7 +117,6 @@ function JoinExam({ onJoined }) {
     }
   };
 
-  // 🆘 Hilfe anfordern (manuelle Prüfung)
   const requestHelp = async () => {
     if (!selectedExam) {
       alert("Bitte zuerst eine Prüfung auswählen.");
@@ -146,7 +139,6 @@ function JoinExam({ onJoined }) {
     }
   };
 
-  // 🧾 Prüfung beitreten
   const joinExam = async (examId) => {
     if (!verified) return;
     setJoining(true);
@@ -157,15 +149,12 @@ function JoinExam({ onJoined }) {
         { headers: { Authorization: `Token ${token}` } }
       );
       const joinedMessage = res.data.message || "Erfolgreich der Prüfung beigetreten!";
-      // Optional: kurze Rückmeldung
       console.log(joinedMessage);
-      // Direkt zur Prüfungsseite navigieren
       const exam = exams.find((e) => e.id === examId) || selectedExam;
       if (onJoined && exam) {
         onJoined(exam);
         return;
       }
-      // Fallback: Reset wenn keine Navigation gewünscht
       setSelectedExam(null);
       setStep(1);
       setFaceDataUrl(null);
@@ -270,13 +259,11 @@ function JoinExam({ onJoined }) {
             </button>
           </div>
 
-          {/* Vorschau */}
           <div className="row" style={{ marginTop: 16 }}>
             <Preview title="Gesicht" dataUrl={faceDataUrl} />
             <Preview title="Ausweis" dataUrl={idDataUrl} />
           </div>
 
-          {/* Ergebnis */}
           <div style={{ marginTop: 16 }}>
             {verifying && <p className="subtle">⏳ Überprüfung läuft …</p>}
             {message && (
