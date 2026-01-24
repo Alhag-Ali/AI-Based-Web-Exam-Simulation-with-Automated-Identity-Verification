@@ -1,42 +1,41 @@
-<<<<<<< HEAD
-# 1. Bytecode und Cache
-# Kompilierte Python-Dateien, die automatisch erstellt werden
+# Python bytecode / caches
 __pycache__/
-*.pyc
+*.py[cod]
+*.so
 
-# 2. Virtuelle Umgebung
-# (Dies war Ihre Hauptfrage)
+# Virtual environments
 venv/
 .venv/
 env/
+AiExam/venv/
+
+# Environment files / secrets
+.env
+.env.*
 *.env
 
-# 3. Datenbank
-# Die lokale Entwicklungsdatenbank sollte nicht versioniert werden
+# Django / SQLite DBs (local dev)
 db.sqlite3
 *.sqlite3
 
-# 4. Geheime Daten (Environment Variables)
-# WICHTIG: Niemals Passwörter oder API-Keys zu Git hochladen
-.env
-.env.*
+# Django media/static build artifacts
+media/
+staticfiles/
+AiExam/uploads/
 
-# 5. IDE-Konfigurationsordner
-# Persönliche Einstellungen Ihres Code-Editors
+# Node / React
+node_modules/
+AiExam/frontend/node_modules/
+AiExam/frontend/build/
+AiExam/frontend/react
+
+# Editor / OS junk
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
+.~lock*
+*.odt
 
-# 6. Django Medien-Uploads
-# Dateien, die von Benutzern hochgeladen werden (falls zutreffend)
-media/
-=======
-AiExam/venv/
-AiExam/venv/
-__pycache__/
-*.so
-*.pyc
-*.pkl
-*.h5
-*.tflite
-*.onnx
->>>>>>> a8f101f (Add my frontend + backend implementation)
+# Large local artifacts (optional)
+db_chroma_vorlesung/

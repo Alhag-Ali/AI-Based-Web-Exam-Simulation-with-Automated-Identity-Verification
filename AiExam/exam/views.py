@@ -370,14 +370,14 @@ def get_exam_questions_for_professor(request, exam_id):
         os.path.join(base_dir, "Exams_folder", f"{exam_title_lower}.json"),
         os.path.join(base_dir, "uploads", "exams", f"exam_from_Prof_{exam.id}.json"),
         os.path.join(base_dir, "uploads", "exams", f"exam_from_Prof.json"),
-            os.path.join(base_dir, "uploads", "json", "exam.json"),
-        ]
+        os.path.join(base_dir, "uploads", "json", "exam.json"),
+    ]
     
     if os.path.exists(upload_dir):
         uuid_pattern = os.path.join(upload_dir, f"exam_from_Prof_{exam.id}_*.json")
-            uuid_files = glob.glob(uuid_pattern)
-            if uuid_files:
-                uuid_files.sort(key=os.path.getmtime, reverse=True)
+        uuid_files = glob.glob(uuid_pattern)
+        if uuid_files:
+            uuid_files.sort(key=os.path.getmtime, reverse=True)
             possible_paths.insert(0, uuid_files[0])
 
     for json_path in possible_paths:

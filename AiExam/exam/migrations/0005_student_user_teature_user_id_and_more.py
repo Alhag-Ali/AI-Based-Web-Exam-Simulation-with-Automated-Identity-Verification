@@ -11,24 +11,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
+        migrations.AlterField(
             model_name='student',
-            name='user',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='exam.user'),
-        ),
-        migrations.AddField(
-            model_name='teature',
-            name='user_id',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='exam.user'),
+            name='first_name',
+            field=models.CharField(max_length=50),
         ),
         migrations.AlterField(
             model_name='student',
-            name='family_name',
-            field=models.CharField(max_length=100),
-        ),
-        migrations.AlterField(
-            model_name='student',
-            name='name',
-            field=models.CharField(max_length=100),
+            name='last_name',
+            field=models.CharField(max_length=50),
         ),
     ]
