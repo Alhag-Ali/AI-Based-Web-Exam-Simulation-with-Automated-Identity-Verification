@@ -1,0 +1,10 @@
+Django>=5.2,<6
+djangorestframework>=3.14
+django-cors-headers>=4.0
+django-filter>=23.0
+Pillow>=10.0
+numpy>=1.24
+opencv-python-headless>=4.8
+deepface>=0.0.79
+pytesseract>=0.3.10
+tf-keras>=2.20

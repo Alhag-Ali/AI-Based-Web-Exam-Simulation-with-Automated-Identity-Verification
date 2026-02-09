@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
 function CreateExam({ onCreated }) {
@@ -98,9 +98,8 @@ function CreateExam({ onCreated }) {
     }
   };
 
-  const loadQuestions = async () => {
+  const loadQuestions = useCallback(async () => {
     if (!createdExam) return;
-    
     setLoadingQuestions(true);
     try {
       const res = await axios.get(
@@ -125,13 +124,13 @@ function CreateExam({ onCreated }) {
     } finally {
       setLoadingQuestions(false);
     }
-  };
+  }, [createdExam, token]);
 
   useEffect(() => {
     if (createdExam?.id) {
       loadQuestions();
     }
-  }, [createdExam?.id]);
+  }, [createdExam?.id, loadQuestions]);
 
   const handleSaveQuestions = async () => {
     if (!createdExam) return;
