@@ -40,18 +40,43 @@ function App() {
   }, [token]);
 
   if (!token) {
-    return <div className="container"><Login /></div>;
+    return (
+      <div className="app-shell">
+        <div className="bg-orb orb-a" />
+        <div className="bg-orb orb-b" />
+        <div className="bg-orb orb-c" />
+        <div className="container">
+          <Login />
+        </div>
+      </div>
+    );
   }
 
   if (loading) {
-    return <div className="container"><div className="card">Lade...</div></div>;
+    return (
+      <div className="app-shell">
+        <div className="bg-orb orb-a" />
+        <div className="bg-orb orb-b" />
+        <div className="bg-orb orb-c" />
+        <div className="container">
+          <div className="card">Lade...</div>
+        </div>
+      </div>
+    );
   }
 
   if (currentExam) {
     return (
-      <div>
+      <div className="app-shell">
+        <div className="bg-orb orb-a" />
+        <div className="bg-orb orb-b" />
+        <div className="bg-orb orb-c" />
         <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} />
         <div className="container">
+          <div className="hero card">
+            <div className="hero-title">Pruefungsmodus</div>
+            <div className="hero-subtle">Fokussiertes Layout mit Timer, Fragen und Fortschritt.</div>
+          </div>
           <ExamPage exam={currentExam} onExit={() => setCurrentExam(null)} />
         </div>
       </div>
@@ -59,9 +84,20 @@ function App() {
   }
 
   return (
-    <div>
+    <div className="app-shell">
+      <div className="bg-orb orb-a" />
+      <div className="bg-orb orb-b" />
+      <div className="bg-orb orb-c" />
       <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} />
       <div className="container">
+        <div className="hero card">
+          <div className="hero-title">{viewMode === "staff" ? "Professor Dashboard" : "Student Dashboard"}</div>
+          <div className="hero-subtle">
+            {viewMode === "staff"
+              ? "Erstelle Pruefungen, lade PDF-Folien hoch und verwalte Fragen zentral."
+              : "Waehle eine Pruefung, verifiziere dich und starte direkt mit dem Exam."}
+          </div>
+        </div>
         {viewMode === "staff" ? (
           <CreateExam onCreated={(exam) => {
             alert(`Prüfung "${exam.title}" erfolgreich erstellt! Du kannst jetzt Fragen hochladen.`);
@@ -89,6 +125,22 @@ function TopBar({ isStaff, viewMode, onViewModeChange }) {
           <div>AI Exam</div>
         </div>
         <div className="row" style={{ gap: 12, alignItems: "center" }}>
+          {isStaff && (
+            <div className="mode-switch">
+              <button
+                className={`mode-btn ${viewMode === "student" ? "active" : ""}`}
+                onClick={() => onViewModeChange("student")}
+              >
+                Student
+              </button>
+              <button
+                className={`mode-btn ${viewMode === "staff" ? "active" : ""}`}
+                onClick={() => onViewModeChange("staff")}
+              >
+                Professor
+              </button>
+            </div>
+          )}
           <span className="badge">{viewMode === "staff" ? "Professor" : "Student"}</span>
           <button className="btn secondary" onClick={logout}>Abmelden</button>
         </div>
