@@ -3,6 +3,7 @@ import Login from "./Login";
 import JoinExam from "./JoinExam";
 import ExamPage from "./ExamPage";
 import CreateExam from "./CreateExam";
+import LearningDashboard from "./LearningDashboard";
 import axios from "axios";
 import "./App.css";
 
@@ -11,6 +12,7 @@ function App() {
   const [currentExam, setCurrentExam] = useState(null);
   const [isStaff, setIsStaff] = useState(false);
   const [viewMode, setViewMode] = useState("student");
+  const [studentTab, setStudentTab] = useState("exams");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -88,13 +90,17 @@ function App() {
       <div className="bg-orb orb-a" />
       <div className="bg-orb orb-b" />
       <div className="bg-orb orb-c" />
-      <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} />
+      <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} studentTab={studentTab} onStudentTabChange={setStudentTab} />
       <div className="container">
         <div className="hero card">
-          <div className="hero-title">{viewMode === "staff" ? "Professor Dashboard" : "Student Dashboard"}</div>
+          <div className="hero-title">
+            {viewMode === "staff" ? "Professor Dashboard" : studentTab === "learn" ? "Lernbereich" : "Student Dashboard"}
+          </div>
           <div className="hero-subtle">
             {viewMode === "staff"
               ? "Erstelle Pruefungen, lade PDF-Folien hoch und verwalte Fragen zentral."
+              : studentTab === "learn"
+              ? "Lade Vorlesungsfolien hoch und erhalte einen personalisierten Lernplan mit Themen und Prüfungen."
               : "Waehle eine Pruefung, verifiziere dich und starte direkt mit dem Exam."}
           </div>
         </div>
@@ -102,6 +108,8 @@ function App() {
           <CreateExam onCreated={(exam) => {
             alert(`Prüfung "${exam.title}" erfolgreich erstellt! Du kannst jetzt Fragen hochladen.`);
           }} />
+        ) : studentTab === "learn" ? (
+          <LearningDashboard />
         ) : (
           <JoinExam onJoined={(exam) => setCurrentExam(exam)} />
         )}
@@ -112,7 +120,7 @@ function App() {
 
 export default App;
 
-function TopBar({ isStaff, viewMode, onViewModeChange }) {
+function TopBar({ isStaff, viewMode, onViewModeChange, studentTab, onStudentTabChange }) {
   const logout = () => {
     localStorage.removeItem("token");
     window.location.reload();
@@ -125,6 +133,22 @@ function TopBar({ isStaff, viewMode, onViewModeChange }) {
           <div>AI Exam</div>
         </div>
         <div className="row" style={{ gap: 12, alignItems: "center" }}>
+          {viewMode === "student" && (
+            <div className="mode-switch">
+              <button
+                className={`mode-btn ${studentTab === "exams" ? "active" : ""}`}
+                onClick={() => onStudentTabChange("exams")}
+              >
+                Prüfungen
+              </button>
+              <button
+                className={`mode-btn ${studentTab === "learn" ? "active" : ""}`}
+                onClick={() => onStudentTabChange("learn")}
+              >
+                Lernen
+              </button>
+            </div>
+          )}
           {isStaff && (
             <div className="mode-switch">
               <button
