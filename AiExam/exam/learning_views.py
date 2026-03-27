@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import unicodedata
 from datetime import datetime
 
 from django.utils import timezone
@@ -16,6 +17,39 @@ from rest_framework.views import APIView
 from .models import LectureSlide, LearningPlan, LearningTopic, Flashcard
 
 
+def _fix_umlauts(text):
+    text = unicodedata.normalize('NFC', text)
+    umlaut_map = {
+        '\u00a8a': 'ä', '\u00a8o': 'ö', '\u00a8u': 'ü',
+        '\u00a8A': 'Ä', '\u00a8O': 'Ö', '\u00a8U': 'Ü',
+        'a\u0308': 'ä', 'o\u0308': 'ö', 'u\u0308': 'ü',
+        'A\u0308': 'Ä', 'O\u0308': 'Ö', 'U\u0308': 'Ü',
+        '\u0308a': 'ä', '\u0308o': 'ö', '\u0308u': 'ü',
+        '\u0308A': 'Ä', '\u0308O': 'Ö', '\u0308U': 'Ü',
+        's\u0307s': 'ß', 'S\u0307S': 'ß',
+    }
+    for bad, good in umlaut_map.items():
+        text = text.replace(bad, good)
+    return text
+
+
+def _clean_pdf_text(text):
+    text = _fix_umlauts(text)
+    lines = text.split('\n')
+    result = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if result and result[-1] != '':
+                result.append('')
+        else:
+            if result and result[-1] != '' and not stripped[0].isupper() and not result[-1].endswith(('.', '!', '?', ':')):
+                result[-1] = result[-1] + ' ' + stripped
+            else:
+                result.append(stripped)
+    return '\n'.join(result)
+
+
 def _extract_text_from_pdf(path):
     from pypdf import PdfReader
     reader = PdfReader(path)
@@ -24,7 +58,7 @@ def _extract_text_from_pdf(path):
         try:
             t = page.extract_text()
             if t and t.strip():
-                parts.append(t.strip())
+                parts.append(_clean_pdf_text(t.strip()))
         except Exception:
             continue
     return "\n\n".join(parts), len(reader.pages)

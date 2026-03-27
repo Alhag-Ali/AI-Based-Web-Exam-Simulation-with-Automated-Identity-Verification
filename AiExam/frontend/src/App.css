@@ -605,9 +605,12 @@ a {
 .fc-face-text {
   font-size: 17px;
   font-weight: 600;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--text);
-  white-space: pre-wrap;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  text-align: center;
 }
 .fc-hint {
   font-size: 12px;

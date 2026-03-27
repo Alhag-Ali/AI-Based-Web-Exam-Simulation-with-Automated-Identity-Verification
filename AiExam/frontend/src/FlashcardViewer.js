@@ -3,6 +3,17 @@ import axios from "axios";
 
 const API = "http://127.0.0.1:8000/api/students";
 
+function cleanText(text) {
+  if (!text) return "";
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function FlashcardViewer({ topic, onClose }) {
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Token ${token}` };
@@ -128,12 +139,12 @@ function FlashcardViewer({ topic, onClose }) {
           <div className={`fc-card${flipped ? " flipped" : ""}`}>
             <div className="fc-face fc-front">
               <div className="fc-face-label">Frage</div>
-              <div className="fc-face-text">{card.question}</div>
+              <div className="fc-face-text">{cleanText(card.question)}</div>
               <div className="fc-hint">Klicken zum Umdrehen</div>
             </div>
             <div className="fc-face fc-back">
               <div className="fc-face-label">Antwort</div>
-              <div className="fc-face-text">{card.answer}</div>
+              <div className="fc-face-text">{cleanText(card.answer)}</div>
             </div>
           </div>
         </div>

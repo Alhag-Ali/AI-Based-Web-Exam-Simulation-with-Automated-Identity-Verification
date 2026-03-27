@@ -4,81 +4,68 @@ import FlashcardViewer from "./FlashcardViewer";
 
 const API = "http://127.0.0.1:8000/api/students";
 
-function LearningDashboard() {
+export default function LearningDashboard() {
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Token ${token}` };
 
-  const [slides, setSlides] = useState([]);
-  const [plans, setPlans] = useState([]);
-  const [activePlan, setActivePlan] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [generatingPlan, setGeneratingPlan] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef();
+  const [plans, setPlans]               = useState([]);
+  const [activePlan, setActivePlan]     = useState(null);
+  const [flashcardTopic, setFlashcardTopic] = useState(null);
 
-  const fetchData = async () => {
+  const [uploading, setUploading]       = useState(false);
+  const [creatingPlan, setCreatingPlan] = useState(false);
+  const [msg, setMsg]                   = useState(null);
+  const [dragOver, setDragOver]         = useState(false);
+  const fileRef = useRef();
+
+  const fetchPlans = async () => {
     try {
-      const [slidesRes, plansRes] = await Promise.all([
-        axios.get(`${API}/learn/slides/`, { headers }),
-        axios.get(`${API}/learn/plans/`, { headers }),
-      ]);
-      setSlides(slidesRes.data);
-      setPlans(plansRes.data);
-      if (plansRes.data.length > 0 && !activePlan) {
-        setActivePlan(plansRes.data[0]);
-      }
+      const res = await axios.get(`${API}/learn/plans/`, { headers });
+      setPlans(res.data);
+      if (res.data.length > 0 && !activePlan) setActivePlan(res.data[0]);
     } catch {
-      setUploadMsg({ type: "error", text: "Fehler beim Laden der Daten." });
+      setMsg({ type: "error", text: "Fehler beim Laden." });
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchPlans(); }, []);
 
   const handleFile = async (file) => {
-    if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
-      setUploadMsg({ type: "error", text: "Nur PDF-Dateien werden akzeptiert." });
+    if (!file?.name?.toLowerCase().endsWith(".pdf")) {
+      setMsg({ type: "error", text: "Nur PDF-Dateien werden akzeptiert." });
       return;
     }
+    setMsg({ type: "info", text: "PDF wird analysiert…" });
     setUploading(true);
-    setUploadMsg({ type: "info", text: "Datei wird hochgeladen und analysiert…" });
-
     const form = new FormData();
     form.append("pdf_file", file);
     try {
-      const res = await axios.post(`${API}/learn/upload/`, form, {
+      const uploadRes = await axios.post(`${API}/learn/upload/`, form, {
         headers: { ...headers, "Content-Type": "multipart/form-data" },
       });
-      const slide = res.data;
-      setUploadMsg({ type: "success", text: `"${slide.title}" hochgeladen (${slide.page_count} Seiten). Lernplan wird erstellt…` });
+      const slide = uploadRes.data;
       setUploading(false);
-      setGeneratingPlan(true);
+      setCreatingPlan(true);
+      setMsg({ type: "info", text: `"${slide.title}" hochgeladen. Lernplan wird erstellt…` });
       const planRes = await axios.post(`${API}/learn/slides/${slide.id}/create-plan/`, {}, { headers });
-      setGeneratingPlan(false);
+      setCreatingPlan(false);
       setActivePlan(planRes.data);
-      setUploadMsg({ type: "success", text: `Lernplan mit ${planRes.data.topic_count} Themen erstellt.` });
-      fetchData();
+      setMsg({ type: "success", text: `Fertig! ${planRes.data.topic_count} Themen erkannt.` });
+      fetchPlans();
     } catch (err) {
       setUploading(false);
-      setGeneratingPlan(false);
-      setUploadMsg({ type: "error", text: err.response?.data?.error || "Fehler beim Verarbeiten der PDF." });
+      setCreatingPlan(false);
+      setMsg({ type: "error", text: err.response?.data?.error || "Fehler beim Verarbeiten." });
     }
   };
 
-  const onFileInput = (e) => handleFile(e.target.files[0]);
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); };
   const onDragOver = (e) => { e.preventDefault(); setDragOver(true); };
-  const onDragLeave = () => setDragOver(false);
-
-  const [flashcardTopic, setFlashcardTopic] = useState(null);
-
-  const topicStatusColor = (s) => s === "completed" ? "var(--success)" : s === "in_progress" ? "var(--warning)" : "rgba(255,255,255,0.2)";
-  const topicStatusLabel = (s) => s === "completed" ? "Abgeschlossen" : s === "in_progress" ? "In Bearbeitung" : "Offen";
 
   const completedCount = activePlan ? activePlan.topics.filter(t => t.status === "completed").length : 0;
-  const progress = activePlan && activePlan.topic_count > 0
-    ? Math.round((completedCount / activePlan.topic_count) * 100)
-    : 0;
+  const progress = activePlan?.topic_count > 0 ? Math.round((completedCount / activePlan.topic_count) * 100) : 0;
+
+  const busy = uploading || creatingPlan;
 
   return (
     <div className="stack-lg">
@@ -87,48 +74,43 @@ function LearningDashboard() {
         <FlashcardViewer topic={flashcardTopic} onClose={() => setFlashcardTopic(null)} />
       )}
 
-      <div className="learn-hero">
-        <div className="learn-hero-icon">🎓</div>
-        <div>
-          <h2 className="learn-hero-title">Lernbereich</h2>
-          <p className="learn-hero-sub">Lade deine Vorlesungsfolien hoch — das System analysiert den Inhalt und erstellt automatisch einen persönlichen Lernplan mit Themen und Prüfungen.</p>
-        </div>
-      </div>
-
       <div
-        className={`learn-dropzone${dragOver ? " dragover" : ""}`}
+        className={`learn-dropzone${dragOver ? " dragover" : ""}${busy ? " busy" : ""}`}
         onDrop={onDrop}
         onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onClick={() => fileInputRef.current?.click()}
+        onDragLeave={() => setDragOver(false)}
+        onClick={() => !busy && fileRef.current?.click()}
       >
-        <input ref={fileInputRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={onFileInput} />
-        {uploading || generatingPlan ? (
+        <input ref={fileRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
+        {busy ? (
           <div className="learn-dropzone-inner">
             <div className="learn-spinner" />
-            <p>{uploading ? "PDF wird analysiert…" : "Lernplan wird erstellt…"}</p>
+            <p className="learn-dropzone-label">{uploading ? "PDF wird analysiert…" : "Lernplan + Karteikarten werden erstellt…"}</p>
+            <p className="learn-dropzone-hint">Das kann einige Sekunden dauern.</p>
           </div>
         ) : (
           <div className="learn-dropzone-inner">
-            <div className="learn-upload-icon">📄</div>
-            <p className="learn-dropzone-label">PDF hierher ziehen oder <span className="learn-link">Datei auswählen</span></p>
-            <p className="learn-dropzone-hint">Vorlesungsfolien, Skripte, Kapitel — als PDF</p>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
+            <p className="learn-dropzone-label">
+              PDF hierher ziehen oder <span className="learn-link">Datei auswählen</span>
+            </p>
+            <p className="learn-dropzone-hint">Vorlesungsfolien, Skripte oder Kapitel als PDF hochladen</p>
           </div>
         )}
       </div>
 
-      {uploadMsg && (
-        <div className={`learn-msg learn-msg-${uploadMsg.type}`}>
-          {uploadMsg.type === "success" && "✅ "}
-          {uploadMsg.type === "error" && "❌ "}
-          {uploadMsg.type === "info" && "⏳ "}
-          {uploadMsg.text}
+      {msg && (
+        <div className={`learn-msg learn-msg-${msg.type}`}>
+          {msg.type === "success" && "✅ "}
+          {msg.type === "error"   && "❌ "}
+          {msg.type === "info"    && "⏳ "}
+          {msg.text}
         </div>
       )}
 
       {plans.length > 1 && (
         <div className="learn-plan-selector">
-          <p className="subtle" style={{ margin: 0, fontSize: 13 }}>Lernpläne</p>
+          <p className="subtle" style={{ margin: "0 0 8px", fontSize: 13 }}>Meine Lernpläne</p>
           <div className="learn-plan-tabs">
             {plans.map(p => (
               <button
@@ -136,7 +118,7 @@ function LearningDashboard() {
                 className={`learn-plan-tab${activePlan?.plan_id === p.plan_id ? " active" : ""}`}
                 onClick={() => setActivePlan(p)}
               >
-                {p.slide_title}
+                📁 {p.slide_title}
               </button>
             ))}
           </div>
@@ -146,75 +128,98 @@ function LearningDashboard() {
       {activePlan && (
         <div className="stack-lg">
 
-          <div className="learn-progress-card card">
-            <div className="learn-progress-header">
+          <div className="card" style={{ padding: "20px 24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div>
-                <div className="learn-progress-title">{activePlan.plan_title}</div>
-                <div className="subtle" style={{ fontSize: 13, marginTop: 4 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{activePlan.plan_title}</div>
+                <div className="subtle" style={{ fontSize: 13, marginTop: 3 }}>
                   {activePlan.slide_title} · {activePlan.slide_pages} Seiten · {activePlan.topic_count} Themen
                 </div>
               </div>
-              <div className="learn-progress-badge">{progress}%</div>
+              <div style={{
+                fontSize: 22, fontWeight: 800,
+                color: progress === 100 ? "var(--success)" : "var(--primary)",
+                minWidth: 52, textAlign: "right"
+              }}>
+                {progress}%
+              </div>
             </div>
             <div className="learn-progress-bar-track">
               <div className="learn-progress-bar-fill" style={{ width: `${progress}%` }} />
             </div>
-            <div className="learn-progress-stats">
-              <span className="learn-stat"><span className="learn-stat-dot" style={{ background: "var(--success)" }} />{completedCount} abgeschlossen</span>
-              <span className="learn-stat"><span className="learn-stat-dot" style={{ background: "var(--warning)" }} />{activePlan.topics.filter(t => t.status === "in_progress").length} in Bearbeitung</span>
-              <span className="learn-stat"><span className="learn-stat-dot" style={{ background: "rgba(255,255,255,0.25)" }} />{activePlan.topics.filter(t => t.status === "open").length} offen</span>
+            <div className="learn-progress-stats" style={{ marginTop: 10 }}>
+              <span className="learn-stat">
+                <span className="learn-stat-dot" style={{ background: "var(--success)" }} />
+                {completedCount} abgeschlossen
+              </span>
+              <span className="learn-stat">
+                <span className="learn-stat-dot" style={{ background: "rgba(255,255,255,0.25)" }} />
+                {activePlan.topics.filter(t => t.status === "open").length} offen
+              </span>
             </div>
           </div>
 
           <div>
-            <h3 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700 }}>Themen ({activePlan.topic_count})</h3>
+            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, opacity: 0.8 }}>
+              🃏 Themen &amp; Karteikarten
+            </h3>
             <div className="learn-topics-grid">
-              {activePlan.topics.map((topic, i) => (
-                <div key={topic.id} className="learn-topic-card card">
-                  <div className="learn-topic-header">
-                    <div className="learn-topic-index">{i + 1}</div>
-                    <div className="learn-topic-status-dot" style={{ background: topicStatusColor(topic.status) }} title={topicStatusLabel(topic.status)} />
-                  </div>
-                  <div className="learn-topic-title">{topic.title}</div>
-                  {topic.summary && (
-                    <p className="learn-topic-summary subtle">{topic.summary.length > 180 ? topic.summary.slice(0, 180) + "…" : topic.summary}</p>
-                  )}
-                  {Array.isArray(topic.key_concepts) && topic.key_concepts.length > 0 && (
-                    <div className="learn-concepts">
-                      {topic.key_concepts.slice(0, 5).map((c, ci) => (
-                        <span key={ci} className="learn-concept-tag">{c}</span>
-                      ))}
+              {activePlan.topics.map((topic, i) => {
+                const done = topic.status === "completed";
+                return (
+                  <div
+                    key={topic.id}
+                    className="learn-topic-card card"
+                    style={{ cursor: "pointer", border: done ? "1px solid var(--success)" : undefined }}
+                    onClick={() => setFlashcardTopic(topic)}
+                  >
+                    <div className="learn-topic-header">
+                      <div className="learn-topic-index">{i + 1}</div>
+                      {done && <span style={{ fontSize: 16 }}>✅</span>}
                     </div>
-                  )}
-                  <div className="learn-topic-footer">
-                    <span className="learn-topic-status-label" style={{ color: topicStatusColor(topic.status) }}>
-                      {topicStatusLabel(topic.status)}
-                    </span>
+
+                    <div className="learn-topic-title">{topic.title}</div>
+
+                    {topic.summary && (
+                      <p className="learn-topic-summary subtle">
+                        {topic.summary.length > 140 ? topic.summary.slice(0, 140) + "…" : topic.summary}
+                      </p>
+                    )}
+
+                    {Array.isArray(topic.key_concepts) && topic.key_concepts.length > 0 && (
+                      <div className="learn-concepts">
+                        {topic.key_concepts.slice(0, 4).map((c, ci) => (
+                          <span key={ci} className="learn-concept-tag">{c}</span>
+                        ))}
+                      </div>
+                    )}
+
                     <button
-                      className="btn secondary"
-                      style={{ fontSize: 12, padding: "5px 12px", marginTop: 8 }}
-                      onClick={() => setFlashcardTopic(topic)}
+                      className="btn"
+                      style={{ marginTop: 12, width: "100%", fontSize: 13 }}
+                      onClick={(e) => { e.stopPropagation(); setFlashcardTopic(topic); }}
                     >
-                      🃏 Karteikarten
+                      🃏 Karteikarten lernen
                     </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
         </div>
       )}
 
-      {plans.length === 0 && !uploading && !generatingPlan && (
-        <div className="card muted-box" style={{ textAlign: "center", padding: "40px 24px" }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📚</div>
-          <p className="subtle">Noch kein Lernplan vorhanden. Lade deine ersten Vorlesungsfolien hoch.</p>
+      {plans.length === 0 && !busy && (
+        <div className="card" style={{ textAlign: "center", padding: "48px 24px", opacity: 0.7 }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>📚</div>
+          <p style={{ fontWeight: 600, margin: "0 0 6px" }}>Noch keine Folien hochgeladen</p>
+          <p className="subtle" style={{ fontSize: 13 }}>
+            Lade oben eine PDF-Datei hoch — das System erstellt automatisch Themen und Karteikarten.
+          </p>
         </div>
       )}
 
     </div>
   );
 }
-
-export default LearningDashboard;
