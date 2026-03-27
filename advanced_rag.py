@@ -18,8 +18,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import os
 
+from langchain_groq import ChatGroq
 import getpass
-import argparse
 
 def read_file(file_path:str):
     """
@@ -132,7 +132,7 @@ def RAG_System(all_pages:str, query:str, k_retrieval:int=3, k_rerank:int=3):
     print("\nStarte Schritt 5: Generierung...")
 
     if "GROQ_API_KEY" not in os.environ:
-        raise ValueError("GROQ_API_KEY is not set in the environment.")
+        os.environ["GROQ_API_KEY"] = getpass.getpass("Enter your Groq API key: ")
 
     # laod LLM from Groq
 
@@ -192,32 +192,11 @@ def RAG_System(all_pages:str, query:str, k_retrieval:int=3, k_rerank:int=3):
 
     return final_question
 
-
-def run_rag_from_pdf(file_path: str, query: str, k_retrieval: int = 10, k_rerank: int = 3):
-    text = read_file(file_path)
-    return RAG_System(text, query, k_retrieval=k_retrieval, k_rerank=k_rerank)
-
 if __name__=="__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--pdf", default="AI_Matrial.pdf")
-    parser.add_argument("--query", default="Was ist Deep Learning")
-    parser.add_argument("--k_retrieval", type=int, default=10)
-    parser.add_argument("--k_rerank", type=int, default=3)
-    parser.add_argument("--groq_api_key", default=None)
-    args = parser.parse_args()
-
-    if args.groq_api_key:
-        os.environ["GROQ_API_KEY"] = args.groq_api_key
-    elif "GROQ_API_KEY" not in os.environ:
-        os.environ["GROQ_API_KEY"] = getpass.getpass("Enter your Groq API key: ")
-
-    rag_run = run_rag_from_pdf(
-        file_path=args.pdf,
-        query=args.query,
-        k_retrieval=args.k_retrieval,
-        k_rerank=args.k_rerank,
-    )
-    print(rag_run)
+    text = read_file("AI_Matrial.pdf")
+    query = "Was is Deep Learning"
+    RAG_run = RAG_System(text, query, k_retrieval=10, k_rerank=3)
+    print(RAG_run)
     
     
     # ------ Ausgabe ------ #

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import FlashcardViewer from "./FlashcardViewer";
 
 const API = "http://127.0.0.1:8000/api/students";
 
@@ -69,6 +70,8 @@ function LearningDashboard() {
   const onDragOver = (e) => { e.preventDefault(); setDragOver(true); };
   const onDragLeave = () => setDragOver(false);
 
+  const [flashcardTopic, setFlashcardTopic] = useState(null);
+
   const topicStatusColor = (s) => s === "completed" ? "var(--success)" : s === "in_progress" ? "var(--warning)" : "rgba(255,255,255,0.2)";
   const topicStatusLabel = (s) => s === "completed" ? "Abgeschlossen" : s === "in_progress" ? "In Bearbeitung" : "Offen";
 
@@ -79,6 +82,10 @@ function LearningDashboard() {
 
   return (
     <div className="stack-lg">
+
+      {flashcardTopic && (
+        <FlashcardViewer topic={flashcardTopic} onClose={() => setFlashcardTopic(null)} />
+      )}
 
       <div className="learn-hero">
         <div className="learn-hero-icon">🎓</div>
@@ -183,6 +190,13 @@ function LearningDashboard() {
                     <span className="learn-topic-status-label" style={{ color: topicStatusColor(topic.status) }}>
                       {topicStatusLabel(topic.status)}
                     </span>
+                    <button
+                      className="btn secondary"
+                      style={{ fontSize: 12, padding: "5px 12px", marginTop: 8 }}
+                      onClick={() => setFlashcardTopic(topic)}
+                    >
+                      🃏 Karteikarten
+                    </button>
                   </div>
                 </div>
               ))}

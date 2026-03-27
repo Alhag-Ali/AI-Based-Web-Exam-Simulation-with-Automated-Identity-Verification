@@ -13,7 +13,7 @@ from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.views import APIView
 
-from .models import LectureSlide, LearningPlan, LearningTopic
+from .models import LectureSlide, LearningPlan, LearningTopic, Flashcard
 
 
 def _extract_text_from_pdf(path):
@@ -181,7 +181,7 @@ def create_learning_plan(request, slide_id):
     for i, (title, raw_text) in enumerate(sections):
         summary = _make_summary(raw_text)
         concepts = _extract_key_concepts(raw_text)
-        LearningTopic.objects.create(
+        topic = LearningTopic.objects.create(
             plan=plan,
             title=title[:300],
             summary=summary,
@@ -190,6 +190,15 @@ def create_learning_plan(request, slide_id):
             order=i,
             status='open',
         )
+        cards_data = _generate_flashcards(topic)
+        for j, card in enumerate(cards_data):
+            Flashcard.objects.create(
+                topic=topic,
+                question=card['question'],
+                answer=card['answer'],
+                order=j,
+                known=False,
+            )
 
     topics = list(plan.topics.values('id', 'title', 'summary', 'key_concepts', 'order', 'status'))
 
@@ -243,6 +252,139 @@ def get_learning_plan(request, plan_id):
         'topics_completed': sum(1 for t in topics if t['status'] == 'completed'),
         'topics': topics,
     })
+
+
+def _generate_flashcards(topic):
+    text = topic.raw_text or topic.summary
+    concepts = topic.key_concepts if isinstance(topic.key_concepts, list) else []
+    cards = []
+
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    sentences = [s.strip() for s in sentences if 40 < len(s.strip()) < 350]
+
+    def_patterns = [
+        (r'(.{4,60})\s+(?:ist|sind|bezeichnet|bedeutet|beschreibt)\s+(.{15,250})', "Was ist {term}?", "{definition}"),
+        (r'(.{4,60})\s*:\s*(.{15,250})', 'Was versteht man unter "{term}"?', "{definition}"),
+        (r'(?:Der|Die|Das)\s+(.{4,50})\s+(?:ist|sind|ermöglicht|beschreibt)\s+(.{15,200})', "Was ist {term}?", "{definition}"),
+    ]
+
+    used_questions = set()
+    for sent in sentences:
+        for pat, q_tmpl, a_tmpl in def_patterns:
+            m = re.match(pat, sent, re.IGNORECASE)
+            if m:
+                term = m.group(1).strip()
+                definition = m.group(2).strip()
+                if len(term) < 4 or len(definition) < 15:
+                    continue
+                q = q_tmpl.format(term=term)
+                a = a_tmpl.format(definition=definition)
+                if q not in used_questions:
+                    used_questions.add(q)
+                    cards.append({'question': q, 'answer': a})
+                break
+
+    for concept in concepts[:6]:
+        q = f"Was ist {concept}?"
+        if q not in used_questions:
+            relevant = next(
+                (s for s in sentences if concept.lower() in s.lower()),
+                concept
+            )
+            used_questions.add(q)
+            cards.append({'question': q, 'answer': relevant[:300]})
+
+    for sent in sentences:
+        if len(cards) >= 15:
+            break
+        words = sent.split()
+        if len(words) < 8:
+            continue
+        pivot = len(words) // 2
+        blank_word = next(
+            (w for w in words[pivot:pivot+4] if len(w) > 4 and w[0].isupper()),
+            None
+        )
+        if not blank_word:
+            continue
+        masked = sent.replace(blank_word, "___", 1)
+        q = f"Fülle die Lücke aus:\n{masked}"
+        if q not in used_questions:
+            used_questions.add(q)
+            cards.append({'question': q, 'answer': blank_word})
+
+    if not cards:
+        for i, sent in enumerate(sentences[:8]):
+            q = 'Was beschreibt folgender Satz?\n"' + sent[:120] + '..."'
+            cards.append({'question': q, 'answer': sent})
+
+    return cards[:15]
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_flashcards(request, topic_id):
+    try:
+        topic = LearningTopic.objects.select_related('plan__student').get(
+            id=topic_id, plan__student=request.user
+        )
+    except LearningTopic.DoesNotExist:
+        return Response({'error': 'Thema nicht gefunden.'}, status=404)
+
+    Flashcard.objects.filter(topic=topic).delete()
+
+    cards_data = _generate_flashcards(topic)
+    created = []
+    for i, card in enumerate(cards_data):
+        fc = Flashcard.objects.create(
+            topic=topic,
+            question=card['question'],
+            answer=card['answer'],
+            order=i,
+            known=False,
+        )
+        created.append({'id': fc.id, 'question': fc.question, 'answer': fc.answer, 'order': fc.order, 'known': fc.known})
+
+    return Response({
+        'topic_id': topic.id,
+        'topic_title': topic.title,
+        'flashcard_count': len(created),
+        'flashcards': created,
+    }, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_flashcards(request, topic_id):
+    try:
+        topic = LearningTopic.objects.select_related('plan__student').get(
+            id=topic_id, plan__student=request.user
+        )
+    except LearningTopic.DoesNotExist:
+        return Response({'error': 'Thema nicht gefunden.'}, status=404)
+
+    cards = list(topic.flashcards.values('id', 'question', 'answer', 'order', 'known'))
+    return Response({
+        'topic_id': topic.id,
+        'topic_title': topic.title,
+        'flashcard_count': len(cards),
+        'flashcards': cards,
+    })
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def mark_flashcard(request, card_id):
+    try:
+        card = Flashcard.objects.select_related('topic__plan__student').get(
+            id=card_id, topic__plan__student=request.user
+        )
+    except Flashcard.DoesNotExist:
+        return Response({'error': 'Karte nicht gefunden.'}, status=404)
+
+    card.known = request.data.get('known', card.known)
+    card.save()
+    return Response({'id': card.id, 'known': card.known})
 
 
 @api_view(['GET'])

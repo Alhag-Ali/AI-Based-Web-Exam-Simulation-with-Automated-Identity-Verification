@@ -122,3 +122,17 @@ class LearningTopic(models.Model):
 
     def __str__(self):
         return f"{self.plan.title} — Topic {self.order}: {self.title}"
+
+
+class Flashcard(models.Model):
+    topic = models.ForeignKey(LearningTopic, on_delete=models.CASCADE, related_name='flashcards')
+    question = models.TextField()
+    answer = models.TextField()
+    order = models.IntegerField(default=0)
+    known = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"[{self.topic.title}] {self.question[:60]}"

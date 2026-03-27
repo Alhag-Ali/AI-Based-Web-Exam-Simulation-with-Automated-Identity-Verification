@@ -1,6 +1,10 @@
 from django.urls import path
 from .views import LoginView, ExamListView, JoinExamView, ExamQuestionsView, verify_identity, request_manual_check, upload_exam_questions, upload_pdf_and_generate_questions, get_exam_questions_for_professor, save_exam_questions
-from .learning_views import upload_lecture_slide, create_learning_plan, list_learning_plans, get_learning_plan, list_lecture_slides
+from .learning_views import (
+    upload_lecture_slide, create_learning_plan, list_learning_plans,
+    get_learning_plan, list_lecture_slides,
+    generate_flashcards, get_flashcards, mark_flashcard,
+)
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -19,4 +23,7 @@ urlpatterns = [
     path('learn/plans/', list_learning_plans, name='learn-plans'),
     path('learn/plans/<int:plan_id>/', get_learning_plan, name='learn-plan-detail'),
     path('learn/slides/<int:slide_id>/create-plan/', create_learning_plan, name='learn-create-plan'),
+    path('learn/topics/<int:topic_id>/flashcards/', get_flashcards, name='learn-flashcards-get'),
+    path('learn/topics/<int:topic_id>/flashcards/generate/', generate_flashcards, name='learn-flashcards-generate'),
+    path('learn/flashcards/<int:card_id>/mark/', mark_flashcard, name='learn-flashcard-mark'),
 ]
