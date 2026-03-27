@@ -16,6 +16,7 @@ function JoinExam({ onJoined }) {
   const [message, setMessage] = useState("");
   const [details, setDetails] = useState(null);
   const [joining, setJoining] = useState(false);
+  const [enrollError, setEnrollError] = useState(null);
   const webcamRef = useRef(null);
   const token = localStorage.getItem("token");
 
@@ -164,7 +165,12 @@ function JoinExam({ onJoined }) {
       setDetails(null);
     } catch (err) {
       console.error(err);
-      alert("Fehler beim Beitritt zur Prüfung.");
+      const errData = err.response?.data;
+      if (errData?.error === "not_enrolled") {
+        setEnrollError(errData.message || "Sie sind nicht für diese Prüfung zugelassen.");
+      } else {
+        alert(errData?.message || "Fehler beim Beitritt zur Prüfung.");
+      }
     } finally {
       setJoining(false);
     }
@@ -193,6 +199,7 @@ function JoinExam({ onJoined }) {
               className="btn secondary"
               onClick={() => {
                 setSelectedExam(exam);
+                setEnrollError(null);
                 resetFace();
                 resetId();
               }}
@@ -211,6 +218,18 @@ function JoinExam({ onJoined }) {
               Schritt 1️⃣ <b>Gesicht aufnehmen</b> → Schritt 2️⃣ <b>Ausweis aufnehmen</b> → Schritt 3️⃣ <b>Vergleichen</b>
             </p>
           </div>
+
+          {enrollError && (
+            <div className="card" style={{ borderColor: "rgba(239,68,68,.4)", background: "rgba(239,68,68,.08)", marginTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <span style={{ fontSize: 22 }}>🚫</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#fca5a5", marginBottom: 4 }}>Nicht zugelassen</div>
+                  <div style={{ color: "#fecaca", fontSize: 14 }}>{enrollError}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Webcam
             ref={webcamRef}

@@ -65,6 +65,20 @@ class ExamParticipation(models.Model):
         return f"{self.student.email} → {self.exam.title}"
 
 
+class ExamEnrollment(models.Model):
+    exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='enrollments')
+    matriculation_number = models.CharField(max_length=20)
+    note = models.CharField(max_length=100, blank=True)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('exam', 'matriculation_number')
+        ordering = ['matriculation_number']
+
+    def __str__(self):
+        return f"{self.exam.title} → {self.matriculation_number}"
+
+
 class LectureSlide(models.Model):
     STATUS_CHOICES = [
         ('processing', 'Processing'),
