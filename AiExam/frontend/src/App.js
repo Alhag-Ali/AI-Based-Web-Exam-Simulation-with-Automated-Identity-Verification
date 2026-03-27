@@ -4,6 +4,7 @@ import JoinExam from "./JoinExam";
 import ExamPage from "./ExamPage";
 import CreateExam from "./CreateExam";
 import LearningDashboard from "./LearningDashboard";
+import ProfessorDashboard from "./ProfessorDashboard";
 import axios from "axios";
 import "./App.css";
 
@@ -12,6 +13,7 @@ function App() {
   const [currentExam, setCurrentExam] = useState(null);
   const [isStaff, setIsStaff] = useState(false);
   const [studentTab, setStudentTab] = useState("exams");
+  const [profTab, setProfTab] = useState("dashboard");
   const [loading, setLoading] = useState(true);
 
   const viewMode = isStaff ? "staff" : "student";
@@ -81,24 +83,35 @@ function App() {
       <div className="bg-orb orb-a" />
       <div className="bg-orb orb-b" />
       <div className="bg-orb orb-c" />
-      <TopBar isStaff={isStaff} viewMode={viewMode} studentTab={studentTab} onStudentTabChange={setStudentTab} />
+      <TopBar
+        isStaff={isStaff} viewMode={viewMode}
+        studentTab={studentTab} onStudentTabChange={setStudentTab}
+        profTab={profTab} onProfTabChange={setProfTab}
+      />
       <div className="container">
         <div className="hero card">
           <div className="hero-title">
-            {viewMode === "staff" ? "Professor Dashboard" : studentTab === "learn" ? "Lernbereich" : "Student Dashboard"}
+            {viewMode === "staff"
+              ? (profTab === "dashboard" ? "Professor Dashboard" : "Neue Prüfung erstellen")
+              : studentTab === "learn" ? "Lernbereich" : "Student Dashboard"}
           </div>
           <div className="hero-subtle">
             {viewMode === "staff"
-              ? "Erstelle Pruefungen, lade PDF-Folien hoch und verwalte Fragen zentral."
+              ? (profTab === "dashboard"
+                  ? "Übersicht aller Prüfungen, Teilnehmer und Statistiken."
+                  : "Prüfung erstellen und Fragen mit KI-RAG generieren.")
               : studentTab === "learn"
-              ? "Lade Vorlesungsfolien hoch und erhalte einen personalisierten Lernplan mit Themen und Prüfungen."
-              : "Waehle eine Pruefung, verifiziere dich und starte direkt mit dem Exam."}
+              ? "Lade Vorlesungsfolien hoch — erhalte Lernplan und Karteikarten."
+              : "Wähle eine Prüfung, verifiziere dich und starte direkt."}
           </div>
         </div>
+
         {viewMode === "staff" ? (
-          <CreateExam onCreated={(exam) => {
-            alert(`Prüfung "${exam.title}" erfolgreich erstellt! Du kannst jetzt Fragen hochladen.`);
-          }} />
+          profTab === "dashboard" ? (
+            <ProfessorDashboard onCreateExam={() => setProfTab("create")} />
+          ) : (
+            <CreateExam onCreated={() => setProfTab("dashboard")} />
+          )
         ) : studentTab === "learn" ? (
           <LearningDashboard />
         ) : (
@@ -111,7 +124,7 @@ function App() {
 
 export default App;
 
-function TopBar({ isStaff, viewMode, studentTab, onStudentTabChange }) {
+function TopBar({ isStaff, viewMode, studentTab, onStudentTabChange, profTab, onProfTabChange }) {
   const logout = () => {
     localStorage.removeItem("token");
     window.location.reload();
@@ -126,17 +139,21 @@ function TopBar({ isStaff, viewMode, studentTab, onStudentTabChange }) {
         <div className="row" style={{ gap: 12, alignItems: "center" }}>
           {viewMode === "student" && (
             <div className="mode-switch">
-              <button
-                className={`mode-btn ${studentTab === "exams" ? "active" : ""}`}
-                onClick={() => onStudentTabChange("exams")}
-              >
+              <button className={`mode-btn ${studentTab === "exams" ? "active" : ""}`} onClick={() => onStudentTabChange("exams")}>
                 Prüfungen
               </button>
-              <button
-                className={`mode-btn ${studentTab === "learn" ? "active" : ""}`}
-                onClick={() => onStudentTabChange("learn")}
-              >
+              <button className={`mode-btn ${studentTab === "learn" ? "active" : ""}`} onClick={() => onStudentTabChange("learn")}>
                 Lernen
+              </button>
+            </div>
+          )}
+          {viewMode === "staff" && (
+            <div className="mode-switch">
+              <button className={`mode-btn ${profTab === "dashboard" ? "active" : ""}`} onClick={() => onProfTabChange("dashboard")}>
+                📊 Dashboard
+              </button>
+              <button className={`mode-btn ${profTab === "create" ? "active" : ""}`} onClick={() => onProfTabChange("create")}>
+                ➕ Neue Prüfung
               </button>
             </div>
           )}

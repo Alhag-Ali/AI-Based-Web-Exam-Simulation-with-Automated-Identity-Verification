@@ -894,3 +894,73 @@ def request_manual_check(request):
         pass
 
     return Response({"ok": True, "message": "Provider has been notified for manual review."}, status=200)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def professor_dashboard(request):
+    if not request.user.is_staff:
+        return Response({"error": "Nur Staff-Mitglieder dürfen auf das Dashboard zugreifen."}, status=403)
+
+    exams = Exam.objects.filter(created_by=request.user).order_by('-created_at')
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    upload_dir = os.path.join(base_dir, "uploads", "exams")
+
+    def _question_count(exam):
+        if not os.path.exists(upload_dir):
+            return 0
+        pattern = os.path.join(upload_dir, f"exam_from_Prof_{exam.id}_*.json")
+        files = glob.glob(pattern)
+        if not files:
+            return 0
+        files.sort(key=os.path.getmtime, reverse=True)
+        try:
+            with open(files[0], 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return len(data)
+                if isinstance(data, dict) and "questions" in data:
+                    return len(data["questions"])
+        except Exception:
+            pass
+        return 0
+
+    now = timezone.now()
+    exam_list = []
+    total_participants = 0
+
+    for exam in exams:
+        participants = ExamParticipation.objects.filter(exam=exam)
+        participant_count = participants.count()
+        total_participants += participant_count
+
+        student_list = []
+        for p in participants.select_related('student'):
+            student_list.append({
+                "email": p.student.email,
+                "name": f"{p.student.first_name} {p.student.last_name}".strip(),
+                "joined_at": p.joined_at.isoformat(),
+            })
+
+        q_count = _question_count(exam)
+        is_past = exam.date < now
+
+        exam_list.append({
+            "id": exam.id,
+            "title": exam.title,
+            "date": exam.date.isoformat(),
+            "duration_minutes": exam.duration_minutes,
+            "description": exam.description or "",
+            "created_at": exam.created_at.isoformat() if exam.created_at else None,
+            "participant_count": participant_count,
+            "question_count": q_count,
+            "is_past": is_past,
+            "students": student_list,
+        })
+
+    return Response({
+        "total_exams": len(exam_list),
+        "total_participants": total_participants,
+        "exams": exam_list,
+    })
