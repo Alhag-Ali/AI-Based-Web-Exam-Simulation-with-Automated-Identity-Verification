@@ -9,8 +9,6 @@ function CreateExam({ onCreated }) {
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState("");
   const [createdExam, setCreatedExam] = useState(null);
-  const [uploadingPdf, setUploadingPdf] = useState(false);
-  const [uploadedPdfName, setUploadedPdfName] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
@@ -21,7 +19,6 @@ function CreateExam({ onCreated }) {
   const [ragGroqKey, setRagGroqKey] = useState("");
   const [ragGenerating, setRagGenerating] = useState(false);
   const [ragPdfName, setRagPdfName] = useState(null);
-  const [ragTab, setRagTab] = useState("simple");
   const ragFileRef = useRef(null);
 
   const token = localStorage.getItem("token");
@@ -54,56 +51,6 @@ function CreateExam({ onCreated }) {
       }
     } finally {
       setCreating(false);
-    }
-  };
-
-  const handleUploadPdf = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !createdExam) {
-      alert("Bitte erstelle zuerst eine Prüfung.");
-      return;
-    }
-
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      alert("Bitte wähle eine PDF-Datei aus.");
-      return;
-    }
-
-    setUploadingPdf(true);
-    setMessage("");
-
-    const formData = new FormData();
-    formData.append("pdf_file", file);
-
-    try {
-      const res = await axios.post(
-        `http://127.0.0.1:8000/api/students/exams/${createdExam.id}/upload-pdf/`,
-        formData,
-        {
-          headers: {
-            Authorization: `Token ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
-      setMessage(`✅ ${res.data.message} (${res.data.questions_count} Fragen generiert)`);
-      setUploadedPdfName(file.name);
-      if (createdExam) {
-        setTimeout(() => {
-          loadQuestions();
-        }, 500);
-      }
-    } catch (err) {
-      console.error("Error uploading PDF:", err);
-      if (err.response?.status === 403) {
-        setMessage("❌ Nur Staff-Mitglieder können PDFs hochladen.");
-      } else if (err.response?.status === 400) {
-        setMessage(`❌ ${err.response.data.error || "Fehler beim Verarbeiten der PDF."}`);
-      } else {
-        setMessage("❌ Fehler beim Hochladen der PDF.");
-      }
-    } finally {
-      setUploadingPdf(false);
     }
   };
 
@@ -242,11 +189,9 @@ function CreateExam({ onCreated }) {
     setMessage("");
     setQuestions([]);
     setEditingQuestion(null);
-    setUploadedPdfName(null);
     setRagTopics("");
     setRagPdfName(null);
     setRagGroqKey("");
-    setRagTab("simple");
   };
 
   return (
@@ -324,147 +269,97 @@ function CreateExam({ onCreated }) {
               ID: {createdExam.id} | Datum: {new Date(createdExam.date).toLocaleString("de-DE")}
             </p>
 
-            <div style={{ marginTop: 16 }}>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                <button
-                  className={`btn${ragTab === "simple" ? "" : " secondary"}`}
-                  style={{ fontSize: 13, padding: "8px 16px" }}
-                  onClick={() => setRagTab("simple")}
-                  type="button"
-                >
-                  📄 Einfach-Upload
-                </button>
-                <button
-                  className={`btn${ragTab === "rag" ? "" : " secondary"}`}
-                  style={{ fontSize: 13, padding: "8px 16px" }}
-                  onClick={() => setRagTab("rag")}
-                  type="button"
-                >
-                  🤖 KI-RAG-Generierung
-                </button>
-              </div>
+            <div className="card" style={{ marginTop: 16, padding: 16, background: "rgba(255,255,255,0.04)" }}>
+              <p style={{ margin: "0 0 4px 0", fontWeight: 700, fontSize: 15 }}>🤖 Fragen mit KI-RAG generieren</p>
+              <p className="subtle" style={{ fontSize: 13, marginBottom: 16 }}>
+                Lade eine PDF hoch und gib Themen an – das System nutzt Retrieval-Augmented Generation mit dem Groq-LLM,
+                um präzise Multiple-Choice-Fragen direkt aus den Vorlesungsfolien zu erzeugen.
+              </p>
 
-              {ragTab === "simple" && (
-                <div className="card" style={{ padding: 16, background: "rgba(255,255,255,0.04)" }}>
-                  <label>
-                    <strong>📄 Vorlesungsfolien (PDF) hochladen</strong>
-                    <p className="subtle" style={{ marginTop: 4, fontSize: 13 }}>
-                      PDF hochladen – das System extrahiert Text und generiert automatisch Fragen.
+              <div className="stack" style={{ gap: 12 }}>
+                <label>
+                  <strong>📄 PDF-Datei (Vorlesungsfolien) *</strong>
+                  <input
+                    ref={ragFileRef}
+                    type="file"
+                    accept=".pdf"
+                    disabled={ragGenerating}
+                    style={{ marginTop: 6, display: "block" }}
+                    onChange={(e) => setRagPdfName(e.target.files?.[0]?.name || null)}
+                  />
+                  {ragPdfName && (
+                    <span className="subtle" style={{ fontSize: 12, marginTop: 4, display: "block" }}>
+                      📎 {ragPdfName}
+                    </span>
+                  )}
+                </label>
+
+                <label>
+                  <strong>📝 Themen (ein Thema pro Zeile) *</strong>
+                  <p className="subtle" style={{ fontSize: 12, margin: "4px 0" }}>
+                    z.B. "Deep Learning", "Gradient Descent", "Overfitting"
+                  </p>
+                  <textarea
+                    className="input"
+                    rows={5}
+                    placeholder={"Was ist Deep Learning?\nGradient Descent Algorithmus\nOverfitting und Regularisierung\nNeuronale Netze Architektur"}
+                    value={ragTopics}
+                    onChange={(e) => setRagTopics(e.target.value)}
+                    disabled={ragGenerating}
+                    style={{ marginTop: 4, fontFamily: "monospace", fontSize: 13 }}
+                  />
+                </label>
+
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  <label style={{ flex: "1 1 140px" }}>
+                    <strong>Fragen pro Thema</strong>
+                    <input
+                      type="number"
+                      className="input"
+                      min={1}
+                      max={5}
+                      value={ragNPerTopic}
+                      onChange={(e) => setRagNPerTopic(Math.min(5, Math.max(1, parseInt(e.target.value) || 1)))}
+                      disabled={ragGenerating}
+                      style={{ marginTop: 4 }}
+                    />
+                  </label>
+
+                  <label style={{ flex: "2 1 260px" }}>
+                    <strong>Groq API-Key</strong>
+                    <p className="subtle" style={{ fontSize: 12, margin: "4px 0" }}>
+                      Falls nicht als Umgebungsvariable gesetzt
                     </p>
                     <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleUploadPdf}
-                      disabled={uploadingPdf}
-                      style={{ marginTop: 8 }}
-                      id="pdf-upload-input"
-                    />
-                    {uploadedPdfName && (
-                      <div className="card success-box" style={{ marginTop: 8, padding: 8 }}>
-                        <span style={{ fontSize: 13 }}>✅ Hochgeladen: {uploadedPdfName}</span>
-                      </div>
-                    )}
-                  </label>
-                  {uploadingPdf && <p style={{ marginTop: 8 }}>⏳ Verarbeite PDF und generiere Fragen...</p>}
-                </div>
-              )}
-
-              {ragTab === "rag" && (
-                <div className="card" style={{ padding: 16, background: "rgba(255,255,255,0.04)" }}>
-                  <p style={{ margin: "0 0 12px 0", fontWeight: 700, fontSize: 15 }}>
-                    🤖 RAG-basierte Fragengeneration
-                  </p>
-                  <p className="subtle" style={{ fontSize: 13, marginBottom: 16 }}>
-                    Lade eine PDF hoch, gib Themen an – das System verwendet Retrieval-Augmented Generation
-                    mit dem Groq-LLM, um präzise Prüfungsfragen aus dem Folienmaterial zu erzeugen.
-                  </p>
-
-                  <div className="stack" style={{ gap: 12 }}>
-                    <label>
-                      <strong>📄 PDF-Datei (Vorlesungsfolien) *</strong>
-                      <input
-                        ref={ragFileRef}
-                        type="file"
-                        accept=".pdf"
-                        disabled={ragGenerating}
-                        style={{ marginTop: 6, display: "block" }}
-                        onChange={(e) => setRagPdfName(e.target.files?.[0]?.name || null)}
-                      />
-                      {ragPdfName && (
-                        <span className="subtle" style={{ fontSize: 12, marginTop: 4, display: "block" }}>
-                          📎 {ragPdfName}
-                        </span>
-                      )}
-                    </label>
-
-                    <label>
-                      <strong>📝 Themen / Fragen (ein Thema pro Zeile) *</strong>
-                      <p className="subtle" style={{ fontSize: 12, margin: "4px 0" }}>
-                        z.B. "Was ist Deep Learning", "Gradient Descent", "Overfitting"
-                      </p>
-                      <textarea
-                        className="input"
-                        rows={5}
-                        placeholder={"Was ist Deep Learning?\nGradient Descent Algorithmus\nOverfitting und Regularisierung\nNeuronale Netze Architektur"}
-                        value={ragTopics}
-                        onChange={(e) => setRagTopics(e.target.value)}
-                        disabled={ragGenerating}
-                        style={{ marginTop: 4, fontFamily: "monospace", fontSize: 13 }}
-                      />
-                    </label>
-
-                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                      <label style={{ flex: "1 1 140px" }}>
-                        <strong>Fragen pro Thema</strong>
-                        <input
-                          type="number"
-                          className="input"
-                          min={1}
-                          max={5}
-                          value={ragNPerTopic}
-                          onChange={(e) => setRagNPerTopic(Math.min(5, Math.max(1, parseInt(e.target.value) || 1)))}
-                          disabled={ragGenerating}
-                          style={{ marginTop: 4 }}
-                        />
-                      </label>
-
-                      <label style={{ flex: "2 1 260px" }}>
-                        <strong>Groq API-Key</strong>
-                        <p className="subtle" style={{ fontSize: 12, margin: "4px 0" }}>
-                          Falls nicht als Umgebungsvariable gesetzt
-                        </p>
-                        <input
-                          type="password"
-                          className="input"
-                          placeholder="gsk_..."
-                          value={ragGroqKey}
-                          onChange={(e) => setRagGroqKey(e.target.value)}
-                          disabled={ragGenerating}
-                          style={{ marginTop: 4 }}
-                        />
-                      </label>
-                    </div>
-
-                    <button
-                      className="btn"
-                      onClick={handleRagGenerate}
+                      type="password"
+                      className="input"
+                      placeholder="gsk_..."
+                      value={ragGroqKey}
+                      onChange={(e) => setRagGroqKey(e.target.value)}
                       disabled={ragGenerating}
-                      type="button"
-                      style={{ alignSelf: "flex-start", marginTop: 4 }}
-                    >
-                      {ragGenerating ? "⏳ RAG generiert Fragen..." : "🚀 Fragen mit RAG generieren"}
-                    </button>
-
-                    {ragGenerating && (
-                      <div style={{ fontSize: 13, color: "var(--accent)" }}>
-                        ⏳ Bitte warten – Embedding, Retrieval und LLM-Generierung laufen...
-                        <br />
-                        <span className="subtle">Dies kann 30–90 Sekunden dauern.</span>
-                      </div>
-                    )}
-                  </div>
+                      style={{ marginTop: 4 }}
+                    />
+                  </label>
                 </div>
-              )}
+
+                <button
+                  className="btn"
+                  onClick={handleRagGenerate}
+                  disabled={ragGenerating}
+                  type="button"
+                  style={{ alignSelf: "flex-start", marginTop: 4 }}
+                >
+                  {ragGenerating ? "⏳ RAG generiert Fragen..." : "🚀 Fragen mit RAG generieren"}
+                </button>
+
+                {ragGenerating && (
+                  <div style={{ fontSize: 13, color: "var(--accent)" }}>
+                    ⏳ Bitte warten – Embedding, Retrieval und LLM-Generierung laufen...
+                    <br />
+                    <span className="subtle">Dies kann 30–90 Sekunden dauern.</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {questions.length > 0 && (
