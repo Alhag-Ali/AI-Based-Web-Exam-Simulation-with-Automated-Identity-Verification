@@ -11,31 +11,22 @@ function App() {
   const token = localStorage.getItem("token");
   const [currentExam, setCurrentExam] = useState(null);
   const [isStaff, setIsStaff] = useState(false);
-  const [viewMode, setViewMode] = useState("student");
   const [studentTab, setStudentTab] = useState("exams");
   const [loading, setLoading] = useState(true);
+
+  const viewMode = isStaff ? "staff" : "student";
 
   useEffect(() => {
     if (token) {
       const savedIsStaff = localStorage.getItem("isStaff");
-      if (savedIsStaff === "true") {
-        setIsStaff(true);
-        setViewMode("staff");
-      } else {
-        setIsStaff(false);
-        setViewMode("student");
-      }
+      setIsStaff(savedIsStaff === "true");
 
       axios
         .get("http://127.0.0.1:8000/api/students/exams/", {
           headers: { Authorization: `Token ${token}` },
         })
-        .then(() => {
-          setLoading(false);
-        })
-        .catch(() => {
-          setLoading(false);
-        });
+        .then(() => setLoading(false))
+        .catch(() => setLoading(false));
     } else {
       setLoading(false);
     }
@@ -73,7 +64,7 @@ function App() {
         <div className="bg-orb orb-a" />
         <div className="bg-orb orb-b" />
         <div className="bg-orb orb-c" />
-        <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} />
+        <TopBar isStaff={isStaff} viewMode={viewMode} />
         <div className="container">
           <div className="hero card">
             <div className="hero-title">Pruefungsmodus</div>
@@ -90,7 +81,7 @@ function App() {
       <div className="bg-orb orb-a" />
       <div className="bg-orb orb-b" />
       <div className="bg-orb orb-c" />
-      <TopBar isStaff={isStaff} viewMode={viewMode} onViewModeChange={setViewMode} studentTab={studentTab} onStudentTabChange={setStudentTab} />
+      <TopBar isStaff={isStaff} viewMode={viewMode} studentTab={studentTab} onStudentTabChange={setStudentTab} />
       <div className="container">
         <div className="hero card">
           <div className="hero-title">
@@ -120,7 +111,7 @@ function App() {
 
 export default App;
 
-function TopBar({ isStaff, viewMode, onViewModeChange, studentTab, onStudentTabChange }) {
+function TopBar({ isStaff, viewMode, studentTab, onStudentTabChange }) {
   const logout = () => {
     localStorage.removeItem("token");
     window.location.reload();
@@ -149,23 +140,7 @@ function TopBar({ isStaff, viewMode, onViewModeChange, studentTab, onStudentTabC
               </button>
             </div>
           )}
-          {isStaff && (
-            <div className="mode-switch">
-              <button
-                className={`mode-btn ${viewMode === "student" ? "active" : ""}`}
-                onClick={() => onViewModeChange("student")}
-              >
-                Student
-              </button>
-              <button
-                className={`mode-btn ${viewMode === "staff" ? "active" : ""}`}
-                onClick={() => onViewModeChange("staff")}
-              >
-                Professor
-              </button>
-            </div>
-          )}
-          <span className="badge">{viewMode === "staff" ? "Professor" : "Student"}</span>
+          <span className="badge">{isStaff ? "Professor" : "Student"}</span>
           <button className="btn secondary" onClick={logout}>Abmelden</button>
         </div>
       </div>
