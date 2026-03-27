@@ -5,6 +5,7 @@ from .learning_views import (
     get_learning_plan, list_lecture_slides,
     generate_flashcards, get_flashcards, mark_flashcard,
 )
+from .rag_views import rag_generate_questions
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
@@ -26,4 +27,6 @@ urlpatterns = [
     path('learn/topics/<int:topic_id>/flashcards/', get_flashcards, name='learn-flashcards-get'),
     path('learn/topics/<int:topic_id>/flashcards/generate/', generate_flashcards, name='learn-flashcards-generate'),
     path('learn/flashcards/<int:card_id>/mark/', mark_flashcard, name='learn-flashcard-mark'),
+
+    path('exams/<int:exam_id>/rag-generate/', rag_generate_questions, name='rag-generate-questions'),
 ]

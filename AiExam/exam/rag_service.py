@@ -1,6 +1,5 @@
 import os
 import re
-import tempfile
 
 PROMPT_TEMPLATE = """
 Du bist ein Universitätsprofessor. Erstelle EINE Multiple-Choice-Prüfungsfrage basierend auf dem angegebenen Thema und Kontext.
@@ -62,7 +61,7 @@ def _parse_llm_output(text: str) -> dict:
             question_lines.append(line)
 
     q_text = " ".join(question_lines).strip()
-    if not q_text or len(options) < 2:
+    if not q_text or len(options) < 4:
         return None
 
     answer = ""
@@ -79,6 +78,7 @@ def _parse_llm_output(text: str) -> dict:
 
 def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None, n_per_topic: int = 1) -> list:
     try:
+        import chromadb
         from langchain_text_splitters import RecursiveCharacterTextSplitter
         from langchain_community.embeddings import HuggingFaceEmbeddings
         from langchain_community.vectorstores import Chroma
@@ -125,38 +125,38 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
 
     questions = []
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        vector_db = Chroma.from_documents(
-            documents=docs,
-            embedding=embedding_model,
-            persist_directory=tmp_dir,
-        )
+    chroma_client = chromadb.EphemeralClient()
+    vector_db = Chroma.from_documents(
+        documents=docs,
+        embedding=embedding_model,
+        client=chroma_client,
+    )
 
-        for topic in topics:
-            for _ in range(n_per_topic):
-                try:
-                    retrieved = vector_db.similarity_search_with_score(query=topic, k=10)
+    for topic in topics:
+        for _ in range(n_per_topic):
+            try:
+                retrieved = vector_db.similarity_search_with_score(query=topic, k=10)
 
-                    pairs = [[topic, doc.page_content] for doc, _ in retrieved]
-                    scores = cross_encoder.predict(pairs)
+                pairs = [[topic, doc.page_content] for doc, _ in retrieved]
+                scores = cross_encoder.predict(pairs)
 
-                    reranked = sorted(
-                        zip([doc for doc, _ in retrieved], scores),
-                        key=lambda x: x[1],
-                        reverse=True,
-                    )
+                reranked = sorted(
+                    zip([doc for doc, _ in retrieved], scores),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
 
-                    top_docs = [doc for doc, _ in reranked[:3]]
-                    context_str = "\n\n".join(
-                        f"--- Auszug {i + 1} ---\n{doc.page_content}"
-                        for i, doc in enumerate(top_docs)
-                    )
+                top_docs = [doc for doc, _ in reranked[:3]]
+                context_str = "\n\n".join(
+                    f"--- Auszug {i + 1} ---\n{doc.page_content}"
+                    for i, doc in enumerate(top_docs)
+                )
 
-                    llm_output = chain.invoke({"query": topic, "context": context_str})
-                    q = _parse_llm_output(llm_output)
-                    if q:
-                        questions.append(q)
-                except Exception as e:
-                    print(f"[RAG] Fehler bei Thema '{topic}': {e}")
+                llm_output = chain.invoke({"query": topic, "context": context_str})
+                q = _parse_llm_output(llm_output)
+                if q:
+                    questions.append(q)
+            except Exception as e:
+                print(f"[RAG] Fehler bei Thema '{topic}': {e}")
 
     return questions
