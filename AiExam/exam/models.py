@@ -63,3 +63,90 @@ class ExamParticipation(models.Model):
 
     def __str__(self):
         return f"{self.student.email} → {self.exam.title}"
+
+
+class ExamEnrollment(models.Model):
+    exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='enrollments')
+    matriculation_number = models.CharField(max_length=20)
+    note = models.CharField(max_length=100, blank=True)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('exam', 'matriculation_number')
+        ordering = ['matriculation_number']
+
+    def __str__(self):
+        return f"{self.exam.title} → {self.matriculation_number}"
+
+
+class LectureSlide(models.Model):
+    STATUS_CHOICES = [
+        ('processing', 'Processing'),
+        ('ready', 'Ready'),
+        ('failed', 'Failed'),
+    ]
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='lecture_slides'
+    )
+    title = models.CharField(max_length=200)
+    file_name = models.CharField(max_length=255)
+    text_content = models.TextField(blank=True)
+    page_count = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='processing')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student.email} — {self.title}"
+
+
+class LearningPlan(models.Model):
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='learning_plans'
+    )
+    slide = models.ForeignKey(LectureSlide, on_delete=models.CASCADE, related_name='plans')
+    title = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student.email} — {self.title}"
+
+
+class LearningTopic(models.Model):
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
+
+    plan = models.ForeignKey(LearningPlan, on_delete=models.CASCADE, related_name='topics')
+    title = models.CharField(max_length=300)
+    summary = models.TextField(blank=True)
+    key_concepts = models.JSONField(default=list)
+    raw_text = models.TextField(blank=True)
+    order = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.plan.title} — Topic {self.order}: {self.title}"
+
+
+class Flashcard(models.Model):
+    topic = models.ForeignKey(LearningTopic, on_delete=models.CASCADE, related_name='flashcards')
+    question = models.TextField()
+    answer = models.TextField()
+    order = models.IntegerField(default=0)
+    known = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"[{self.topic.title}] {self.question[:60]}"

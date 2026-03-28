@@ -16,6 +16,7 @@ function JoinExam({ onJoined }) {
   const [message, setMessage] = useState("");
   const [details, setDetails] = useState(null);
   const [joining, setJoining] = useState(false);
+  const [enrollError, setEnrollError] = useState(null);
   const webcamRef = useRef(null);
   const token = localStorage.getItem("token");
 
@@ -164,7 +165,12 @@ function JoinExam({ onJoined }) {
       setDetails(null);
     } catch (err) {
       console.error(err);
-      alert("Fehler beim Beitritt zur Prüfung.");
+      const errData = err.response?.data;
+      if (errData?.error === "not_enrolled") {
+        setEnrollError(errData.message || "Sie sind nicht für diese Prüfung zugelassen.");
+      } else {
+        alert(errData?.message || "Fehler beim Beitritt zur Prüfung.");
+      }
     } finally {
       setJoining(false);
     }
@@ -193,6 +199,7 @@ function JoinExam({ onJoined }) {
               className="btn secondary"
               onClick={() => {
                 setSelectedExam(exam);
+                setEnrollError(null);
                 resetFace();
                 resetId();
               }}
@@ -212,6 +219,18 @@ function JoinExam({ onJoined }) {
             </p>
           </div>
 
+          {enrollError && (
+            <div className="card" style={{ borderColor: "rgba(239,68,68,.4)", background: "rgba(239,68,68,.08)", marginTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <span style={{ fontSize: 22 }}>🚫</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#fca5a5", marginBottom: 4 }}>Nicht zugelassen</div>
+                  <div style={{ color: "#fecaca", fontSize: 14 }}>{enrollError}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Webcam
             ref={webcamRef}
             audio={false}
@@ -219,9 +238,9 @@ function JoinExam({ onJoined }) {
             width={480}
             height={360}
             videoConstraints={{ facingMode: "user" }}
+            style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", marginTop: 12, width: "100%", maxWidth: 560 }}
           />
 
-          {/* Steuerung */}
           <div className="btn-group" style={{ marginTop: 12 }}>
             {step === 1 && <button className="btn" onClick={captureFace}>📷 Gesicht aufnehmen</button>}
             {step >= 2 && <button className="btn secondary" onClick={resetFace}>↩ Gesicht neu aufnehmen</button>}
@@ -332,9 +351,9 @@ function Preview({ title, dataUrl }) {
         style={{
           width: 220,
           height: 160,
-          background: "#f3f4f6",
-          border: "1px solid #e5e7eb",
-          borderRadius: 8,
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.14)",
+          borderRadius: 10,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -344,7 +363,7 @@ function Preview({ title, dataUrl }) {
         {dataUrl ? (
           <img src={dataUrl} alt={title} style={{ width: "100%" }} />
         ) : (
-          <span style={{ color: "#6b7280" }}>noch kein Bild</span>
+          <span style={{ color: "var(--muted)" }}>noch kein Bild</span>
         )}
       </div>
     </div>

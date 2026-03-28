@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 
 from django.contrib.auth import authenticate
-from .models import Exam, ExamParticipation
+from .models import Exam, ExamParticipation, ExamEnrollment
 from deepface import DeepFace
 
 import numpy as np
@@ -131,6 +131,23 @@ class JoinExamView(APIView):
                 {"error": "Exam not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+        enrollments = ExamEnrollment.objects.filter(exam=exam)
+        if enrollments.exists():
+            student_matrikel = getattr(student, 'matriculation_number', None)
+            if not student_matrikel or not enrollments.filter(matriculation_number=student_matrikel).exists():
+                return Response(
+                    {
+                        "error": "not_enrolled",
+                        "message": (
+                            f"Sie sind nicht für diese Prüfung zugelassen. "
+                            f"Ihre Matrikelnummer ({student_matrikel or 'unbekannt'}) "
+                            f"befindet sich nicht in der Zulassungsliste. "
+                            f"Bitte wenden Sie sich an den Professor."
+                        ),
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         participation, created = ExamParticipation.objects.get_or_create(
             student=student,
@@ -894,3 +911,156 @@ def request_manual_check(request):
         pass
 
     return Response({"ok": True, "message": "Provider has been notified for manual review."}, status=200)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def professor_dashboard(request):
+    if not request.user.is_staff:
+        return Response({"error": "Nur Staff-Mitglieder dürfen auf das Dashboard zugreifen."}, status=403)
+
+    exams = Exam.objects.filter(created_by=request.user).order_by('-created_at')
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    upload_dir = os.path.join(base_dir, "uploads", "exams")
+
+    def _question_count(exam):
+        if not os.path.exists(upload_dir):
+            return 0
+        pattern = os.path.join(upload_dir, f"exam_from_Prof_{exam.id}_*.json")
+        files = glob.glob(pattern)
+        if not files:
+            return 0
+        files.sort(key=os.path.getmtime, reverse=True)
+        try:
+            with open(files[0], 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return len(data)
+                if isinstance(data, dict) and "questions" in data:
+                    return len(data["questions"])
+        except Exception:
+            pass
+        return 0
+
+    now = timezone.now()
+    exam_list = []
+    total_participants = 0
+
+    for exam in exams:
+        participants = ExamParticipation.objects.filter(exam=exam)
+        participant_count = participants.count()
+        total_participants += participant_count
+
+        student_list = []
+        for p in participants.select_related('student'):
+            student_list.append({
+                "email": p.student.email,
+                "name": f"{p.student.first_name} {p.student.last_name}".strip(),
+                "joined_at": p.joined_at.isoformat(),
+            })
+
+        q_count = _question_count(exam)
+        is_past = exam.date < now
+
+        exam_list.append({
+            "id": exam.id,
+            "title": exam.title,
+            "date": exam.date.isoformat(),
+            "duration_minutes": exam.duration_minutes,
+            "description": exam.description or "",
+            "created_at": exam.created_at.isoformat() if exam.created_at else None,
+            "participant_count": participant_count,
+            "question_count": q_count,
+            "is_past": is_past,
+            "students": student_list,
+        })
+
+    return Response({
+        "total_exams": len(exam_list),
+        "total_participants": total_participants,
+        "exams": exam_list,
+    })
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def exam_enrollments(request, exam_id):
+    if not request.user.is_staff:
+        return Response({"error": "Nur Professoren dürfen Zulassungslisten verwalten."}, status=403)
+
+    try:
+        exam = Exam.objects.get(id=exam_id, created_by=request.user)
+    except Exam.DoesNotExist:
+        return Response({"error": "Prüfung nicht gefunden."}, status=404)
+
+    if request.method == 'GET':
+        entries = ExamEnrollment.objects.filter(exam=exam)
+        data = [
+            {
+                "matriculation_number": e.matriculation_number,
+                "note": e.note,
+                "added_at": e.added_at.isoformat(),
+            }
+            for e in entries
+        ]
+        return Response({"exam_id": exam_id, "enrollments": data})
+
+    # POST – add one or many
+    numbers = request.data.get('matriculation_numbers', [])
+    single = request.data.get('matriculation_number', '')
+    note = request.data.get('note', '')
+
+    if single and not numbers:
+        numbers = [single]
+
+    if not numbers:
+        return Response({"error": "Keine Matrikelnummern angegeben."}, status=400)
+
+    added, skipped = [], []
+    for mn in numbers:
+        mn = str(mn).strip()
+        if not mn:
+            continue
+        _, created = ExamEnrollment.objects.get_or_create(
+            exam=exam,
+            matriculation_number=mn,
+            defaults={"note": note},
+        )
+        (added if created else skipped).append(mn)
+
+    return Response({"added": added, "skipped": skipped}, status=201 if added else 200)
+
+
+@api_view(['PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def exam_enrollment_detail(request, exam_id, matrikel):
+    if not request.user.is_staff:
+        return Response({"error": "Nur Professoren dürfen Zulassungslisten verwalten."}, status=403)
+
+    try:
+        exam = Exam.objects.get(id=exam_id, created_by=request.user)
+    except Exam.DoesNotExist:
+        return Response({"error": "Prüfung nicht gefunden."}, status=404)
+
+    try:
+        enrollment = ExamEnrollment.objects.get(exam=exam, matriculation_number=matrikel)
+    except ExamEnrollment.DoesNotExist:
+        return Response({"error": "Zulassung nicht gefunden."}, status=404)
+
+    if request.method == 'DELETE':
+        enrollment.delete()
+        return Response({"message": "Zulassung entfernt."})
+
+    # PUT – edit matrikel or note
+    new_mn = str(request.data.get('matriculation_number', matrikel)).strip()
+    new_note = request.data.get('note', enrollment.note)
+
+    if new_mn != matrikel:
+        if ExamEnrollment.objects.filter(exam=exam, matriculation_number=new_mn).exists():
+            return Response({"error": f"Matrikelnummer {new_mn} ist bereits in der Zulassungsliste."}, status=400)
+        enrollment.matriculation_number = new_mn
+
+    enrollment.note = new_note
+    enrollment.save()
+    return Response({"matriculation_number": enrollment.matriculation_number, "note": enrollment.note})
