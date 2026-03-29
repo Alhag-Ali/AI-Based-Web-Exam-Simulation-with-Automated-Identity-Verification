@@ -1,7 +1,9 @@
 import os
 import re
 
-PROMPT_TEMPLATE = """
+# ── Prompt templates (one per language) ──────────────────────────────────────
+
+PROMPT_EN = """
 You are a university professor. Create ONE multiple-choice exam question based on the given topic and context.
 
 Topic: "{query}"
@@ -22,6 +24,61 @@ D) [Answer D]
 Correct answer: [Letter A, B, C or D]
 """
 
+PROMPT_DE = """
+Du bist ein Universitätsprofessor. Erstelle EINE Multiple-Choice-Prüfungsfrage basierend auf dem angegebenen Thema und Kontext.
+
+Thema: "{query}"
+
+Verwende NUR den folgenden Kontext:
+
+{context}
+
+Antworte GENAU in diesem Format:
+**Frage:**
+[Deine Frage hier]
+
+A) [Antwort A]
+B) [Antwort B]
+C) [Antwort C]
+D) [Antwort D]
+
+Korrekte Antwort: [Buchstabe A, B, C oder D]
+"""
+
+
+def detect_language(text: str) -> str:
+    """
+    Lightweight language detector – no external package needed.
+    Returns 'de' for German, 'en' for English.
+    Counts how often very-common stopwords of each language appear in the
+    first 2 000 characters (enough to judge the dominant language).
+    """
+    sample = text[:2000].lower()
+    words  = re.findall(r"\b\w+\b", sample)
+    if not words:
+        return "en"
+
+    de_words = {
+        "der", "die", "das", "und", "ist", "mit", "von", "für",
+        "auf", "ein", "eine", "einer", "auch", "im", "den", "dem",
+        "an", "zu", "sich", "bei", "wie", "als", "des", "werden",
+        "durch", "nach", "oder", "nicht", "wird", "sind", "haben",
+        "kann", "wird", "zum", "zur", "über", "dass",
+    }
+    en_words = {
+        "the", "and", "of", "is", "in", "to", "for", "with",
+        "that", "are", "this", "it", "as", "an", "be", "by",
+        "or", "not", "from", "at", "has", "have", "can", "we",
+        "on", "its", "which", "their", "will", "all", "one",
+    }
+
+    de_count = sum(1 for w in words if w in de_words)
+    en_count = sum(1 for w in words if w in en_words)
+
+    lang = "de" if de_count > en_count else "en"
+    print(f"[RAG] language detection: de={de_count} en={en_count} → '{lang}'")
+    return lang
+
 
 def _parse_llm_output(text: str) -> dict:
     lines = [re.sub(r"\*+", "", l).strip() for l in text.strip().split("\n")]
@@ -32,7 +89,10 @@ def _parse_llm_output(text: str) -> dict:
     answer_letter = None
 
     option_re = re.compile(r"^([A-D])[)\.]\s+(.+)$", re.IGNORECASE)
-    answer_re = re.compile(r"(?:correct\s+answer|korrekte\s+antwort)\s*:?\s*([A-D])", re.IGNORECASE)
+    answer_re = re.compile(
+        r"(?:correct\s+answer|korrekte\s+antwort|richtige\s+antwort)\s*:?\s*([A-D])",
+        re.IGNORECASE
+    )
 
     in_frage = False
 
@@ -76,7 +136,8 @@ def _parse_llm_output(text: str) -> dict:
     return {"text": q_text, "options": options, "answer": answer}
 
 
-def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None, n_per_topic: int = 1) -> list:
+def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None,
+                           n_per_topic: int = 1, language: str = None) -> list:
     try:
         import chromadb
         from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -99,6 +160,11 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
     if not os.environ.get("GROQ_API_KEY"):
         raise ValueError("GROQ_API_KEY is not set. Please provide an API key.")
 
+    # Auto-detect language if not explicitly provided
+    lang = language if language in ("de", "en") else detect_language(pdf_text)
+    prompt_template = PROMPT_DE if lang == "de" else PROMPT_EN
+    print(f"[RAG] using prompt language: {lang}")
+
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
         chunk_overlap=50,
@@ -120,7 +186,7 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
         max_retries=2,
     )
 
-    prompt = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
+    prompt = ChatPromptTemplate.from_template(prompt_template)
     chain = prompt | llm | StrOutputParser()
 
     questions = []

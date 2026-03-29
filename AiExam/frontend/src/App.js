@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Login from "./Login";
 import JoinExam from "./JoinExam";
+import VerificationPage from "./VerificationPage";
 import ExamPage from "./ExamPage";
 import CreateExam from "./CreateExam";
 import LearningDashboard from "./LearningDashboard";
@@ -10,7 +11,8 @@ import "./App.css";
 
 function App() {
   const token = localStorage.getItem("token");
-  const [currentExam, setCurrentExam] = useState(null);
+  const [currentExam,   setCurrentExam]   = useState(null);
+  const [verifyingExam, setVerifyingExam] = useState(null); // exam pending verification
   const [isStaff, setIsStaff] = useState(false);
   const [studentTab, setStudentTab] = useState("exams");
   const [profTab, setProfTab] = useState("dashboard");
@@ -114,8 +116,14 @@ function App() {
           )
         ) : studentTab === "learn" ? (
           <LearningDashboard />
+        ) : verifyingExam ? (
+          <VerificationPage
+            exam={verifyingExam}
+            onSuccess={(exam) => { setVerifyingExam(null); setCurrentExam(exam); }}
+            onBack={() => setVerifyingExam(null)}
+          />
         ) : (
-          <JoinExam onJoined={(exam) => setCurrentExam(exam)} />
+          <JoinExam onSelectExam={(exam) => setVerifyingExam(exam)} />
         )}
       </div>
     </div>

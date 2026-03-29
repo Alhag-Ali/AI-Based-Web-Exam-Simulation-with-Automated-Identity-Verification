@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import LoginView, ExamListView, JoinExamView, ExamQuestionsView, verify_identity, request_manual_check, upload_exam_questions, upload_pdf_and_generate_questions, get_exam_questions_for_professor, save_exam_questions, professor_dashboard, exam_enrollments, exam_enrollment_detail
+from .views import LoginView, ExamListView, JoinExamView, ExamQuestionsView, verify_identity, extract_matrikel, request_manual_check, upload_exam_questions, upload_pdf_and_generate_questions, get_exam_questions_for_professor, save_exam_questions, professor_dashboard, exam_enrollments, exam_enrollment_detail
 from .learning_views import (
     upload_lecture_slide, create_learning_plan, list_learning_plans,
     get_learning_plan, list_lecture_slides,
@@ -17,6 +17,7 @@ urlpatterns = [
     path('exams/<int:exam_id>/upload-questions/', upload_exam_questions, name='upload-exam-questions'),
     path('exams/<int:exam_id>/upload-pdf/', upload_pdf_and_generate_questions, name='upload-pdf'),
     path('verify-identity/', verify_identity, name='verify_identity'),
+    path('extract-matrikel/', extract_matrikel, name='extract_matrikel'),
     path('help-request/', request_manual_check, name='help_request'),
 
     path('learn/slides/', list_lecture_slides, name='learn-slides'),

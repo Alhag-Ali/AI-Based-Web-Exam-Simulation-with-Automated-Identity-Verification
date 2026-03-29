@@ -41,7 +41,6 @@ function CreateExam({ onCreated }) {
       );
       setCreatedExam(res.data);
       setMessage("✅ Exam created successfully!");
-      if (onCreated) onCreated(res.data);
     } catch (err) {
       console.error("Error creating exam:", err);
       if (err.response?.status === 403) {
@@ -192,6 +191,11 @@ function CreateExam({ onCreated }) {
     setRagTopics("");
     setRagPdfName(null);
     setRagGroqKey("");
+  };
+
+  const goToDashboard = () => {
+    resetForm();
+    if (onCreated) onCreated();
   };
 
   return (
@@ -400,6 +404,9 @@ function CreateExam({ onCreated }) {
             <div className="btn-group" style={{ marginTop: 16 }}>
               <button className="btn secondary" onClick={resetForm}>
                 Create New Exam
+              </button>
+              <button className="btn" onClick={goToDashboard}>
+                ✅ Done – Go to Dashboard
               </button>
             </div>
           </div>

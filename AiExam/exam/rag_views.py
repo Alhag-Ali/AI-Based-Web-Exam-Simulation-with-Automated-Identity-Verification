@@ -69,13 +69,16 @@ def rag_generate_questions(request, exam_id):
                 status=400,
             )
 
-        from .rag_service import generate_questions_rag
+        from .rag_service import generate_questions_rag, detect_language
+
+        detected_lang = detect_language(pdf_text)
 
         questions = generate_questions_rag(
             pdf_text=pdf_text,
             topics=topics,
             groq_api_key=groq_api_key,
             n_per_topic=n_per_topic,
+            language=detected_lang,
         )
 
         if not questions:
@@ -84,11 +87,16 @@ def rag_generate_questions(request, exam_id):
                 status=422,
             )
 
+        lang_label = "German 🇩🇪" if detected_lang == "de" else "English 🇬🇧"
         return Response(
             {
                 "questions": questions,
                 "count": len(questions),
-                "message": f"{len(questions)} question(s) successfully generated with RAG.",
+                "language": detected_lang,
+                "message": (
+                    f"{len(questions)} question(s) generated in {lang_label} "
+                    f"(detected from PDF)."
+                ),
             }
         )
 
