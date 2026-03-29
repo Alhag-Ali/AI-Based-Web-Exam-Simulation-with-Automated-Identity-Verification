@@ -2,24 +2,24 @@ import os
 import re
 
 PROMPT_TEMPLATE = """
-Du bist ein Universitätsprofessor. Erstelle EINE Multiple-Choice-Prüfungsfrage basierend auf dem angegebenen Thema und Kontext.
+You are a university professor. Create ONE multiple-choice exam question based on the given topic and context.
 
-Thema: "{query}"
+Topic: "{query}"
 
-Verwende AUSSCHLIESSLICH den folgenden Kontext:
+Use ONLY the following context:
 
 {context}
 
-Antworte GENAU in diesem Format:
-**Frage:**
-[Deine Frage hier]
+Answer EXACTLY in this format:
+**Question:**
+[Your question here]
 
-A) [Antwort A]
-B) [Antwort B]
-C) [Antwort C]
-D) [Antwort D]
+A) [Answer A]
+B) [Answer B]
+C) [Answer C]
+D) [Answer D]
 
-Korrekte Antwort: [Buchstabe A, B, C oder D]
+Correct answer: [Letter A, B, C or D]
 """
 
 
@@ -32,14 +32,14 @@ def _parse_llm_output(text: str) -> dict:
     answer_letter = None
 
     option_re = re.compile(r"^([A-D])[)\.]\s+(.+)$", re.IGNORECASE)
-    answer_re = re.compile(r"korrekte\s+antwort\s*:?\s*([A-D])", re.IGNORECASE)
+    answer_re = re.compile(r"(?:correct\s+answer|korrekte\s+antwort)\s*:?\s*([A-D])", re.IGNORECASE)
 
     in_frage = False
 
     for line in lines:
-        if re.match(r"^frage\s*:", line, re.IGNORECASE):
+        if re.match(r"^(?:question|frage)\s*:", line, re.IGNORECASE):
             in_frage = True
-            rest = re.sub(r"^frage\s*:\s*", "", line, flags=re.IGNORECASE).strip()
+            rest = re.sub(r"^(?:question|frage)\s*:\s*", "", line, flags=re.IGNORECASE).strip()
             if rest:
                 question_lines.append(rest)
             continue
@@ -88,8 +88,8 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
         from langchain_core.output_parsers import StrOutputParser
     except ImportError as e:
         raise ImportError(
-            f"RAG-Pakete nicht installiert: {e}. "
-            "Bitte ausführen: pip install langchain-text-splitters langchain-community "
+            f"RAG packages not installed: {e}. "
+            "Please run: pip install langchain-text-splitters langchain-community "
             "sentence-transformers chromadb langchain-groq"
         )
 
@@ -97,7 +97,7 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
         os.environ["GROQ_API_KEY"] = groq_api_key
 
     if not os.environ.get("GROQ_API_KEY"):
-        raise ValueError("GROQ_API_KEY ist nicht gesetzt. Bitte API-Key angeben.")
+        raise ValueError("GROQ_API_KEY is not set. Please provide an API key.")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
@@ -148,7 +148,7 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
 
                 top_docs = [doc for doc, _ in reranked[:3]]
                 context_str = "\n\n".join(
-                    f"--- Auszug {i + 1} ---\n{doc.page_content}"
+                    f"--- Excerpt {i + 1} ---\n{doc.page_content}"
                     for i, doc in enumerate(top_docs)
                 )
 
@@ -157,6 +157,6 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
                 if q:
                     questions.append(q)
             except Exception as e:
-                print(f"[RAG] Fehler bei Thema '{topic}': {e}")
+                print(f"[RAG] Error for topic '{topic}': {e}")
 
     return questions

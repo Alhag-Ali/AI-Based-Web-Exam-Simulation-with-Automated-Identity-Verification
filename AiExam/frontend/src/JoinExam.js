@@ -28,11 +28,11 @@ function JoinExam({ onJoined }) {
       })
       .then((res) => setExams(res.data))
       .catch((err) => {
-        console.error("Exams laden fehlgeschlagen:", err);
+        console.error("Failed to load exams:", err);
         const msg =
           err?.response?.status === 401
-            ? "Nicht autorisiert – bitte erneut anmelden."
-            : "Fehler beim Laden der Prüfungen.";
+            ? "Unauthorized – please sign in again."
+            : "Error loading exams.";
         setLoadError(msg);
       });
   }, [token]);
@@ -82,7 +82,7 @@ function JoinExam({ onJoined }) {
     if (!faceDataUrl || !idDataUrl) return;
     setVerifying(true);
     setVerified(false);
-    setMessage("Überprüfung läuft …");
+    setMessage("Verification in progress …");
     setDetails(null);
 
     try {
@@ -111,7 +111,7 @@ function JoinExam({ onJoined }) {
     } catch (err) {
       console.error(err);
       setVerified(false);
-      setMessage(err.response?.data?.message || "Fehler bei der Verifikation.");
+      setMessage(err.response?.data?.message || "Verification failed.");
       setDetails(err.response?.data || null);
     } finally {
       setVerifying(false);
@@ -120,7 +120,7 @@ function JoinExam({ onJoined }) {
 
   const requestHelp = async () => {
     if (!selectedExam) {
-      alert("Bitte zuerst eine Prüfung auswählen.");
+      alert("Please select an exam first.");
       return;
     }
     try {
@@ -129,14 +129,14 @@ function JoinExam({ onJoined }) {
         {
           exam_id: selectedExam.id,
           message:
-            "Verifikation fehlgeschlagen oder problematisch. Bitte manuell prüfen.",
+            "Verification failed or problematic. Please check manually.",
         },
         { headers: { Authorization: `Token ${token}` } }
       );
-      alert(res.data?.message || "Der Anbieter wurde benachrichtigt.");
+      alert(res.data?.message || "The provider has been notified.");
     } catch (err) {
       console.error(err);
-      alert("Konnte Hilfeanfrage nicht senden.");
+      alert("Could not send help request.");
     }
   };
 
@@ -149,7 +149,7 @@ function JoinExam({ onJoined }) {
         {},
         { headers: { Authorization: `Token ${token}` } }
       );
-      const joinedMessage = res.data.message || "Erfolgreich der Prüfung beigetreten!";
+      const joinedMessage = res.data.message || "Successfully joined the exam!";
       console.log(joinedMessage);
       const exam = exams.find((e) => e.id === examId) || selectedExam;
       if (onJoined && exam) {
@@ -167,9 +167,9 @@ function JoinExam({ onJoined }) {
       console.error(err);
       const errData = err.response?.data;
       if (errData?.error === "not_enrolled") {
-        setEnrollError(errData.message || "Sie sind nicht für diese Prüfung zugelassen.");
+        setEnrollError(errData.message || "You are not authorized for this exam.");
       } else {
-        alert(errData?.message || "Fehler beim Beitritt zur Prüfung.");
+        alert(errData?.message || "Error joining the exam.");
       }
     } finally {
       setJoining(false);
@@ -180,13 +180,13 @@ function JoinExam({ onJoined }) {
     <div className="stack-lg">
       <div className="section-title">
         <span className="emoji">📝</span>
-        <h2 style={{ margin: 0 }}>Prüfungen</h2>
+        <h2 style={{ margin: 0 }}>Exams</h2>
       </div>
       {loadError && <div className="card" style={{ borderColor: "rgba(239,68,68,.35)" }}>
         <p style={{ margin: 0, color: "#fecaca" }}>{loadError}</p>
       </div>}
       {!loadError && exams.length === 0 && (
-        <div className="card muted-box"><p style={{ margin: 0 }} className="subtle">Keine Prüfungen gefunden.</p></div>
+        <div className="card muted-box"><p style={{ margin: 0 }} className="subtle">No exams found.</p></div>
       )}
       <ul className="list stack">
         {exams.map((exam) => (
@@ -204,7 +204,7 @@ function JoinExam({ onJoined }) {
                 resetId();
               }}
             >
-              Beitreten
+              Join
             </button>
           </li>
         ))}
@@ -213,9 +213,9 @@ function JoinExam({ onJoined }) {
       {selectedExam && (
         <div className="panel" style={{ padding: 16, marginTop: 8 }}>
           <div className="stack">
-            <h3 style={{ margin: 0 }}>🧾 Identitätsprüfung für {selectedExam.title}</h3>
+            <h3 style={{ margin: 0 }}>🧾 Identity Verification for {selectedExam.title}</h3>
             <p className="subtle" style={{ margin: 0 }}>
-              Schritt 1️⃣ <b>Gesicht aufnehmen</b> → Schritt 2️⃣ <b>Ausweis aufnehmen</b> → Schritt 3️⃣ <b>Vergleichen</b>
+              Step 1️⃣ <b>Capture face</b> → Step 2️⃣ <b>Capture ID</b> → Step 3️⃣ <b>Compare</b>
             </p>
           </div>
 
@@ -224,7 +224,7 @@ function JoinExam({ onJoined }) {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                 <span style={{ fontSize: 22 }}>🚫</span>
                 <div>
-                  <div style={{ fontWeight: 700, color: "#fca5a5", marginBottom: 4 }}>Nicht zugelassen</div>
+                  <div style={{ fontWeight: 700, color: "#fca5a5", marginBottom: 4 }}>Not authorized</div>
                   <div style={{ color: "#fecaca", fontSize: 14 }}>{enrollError}</div>
                 </div>
               </div>
@@ -242,25 +242,25 @@ function JoinExam({ onJoined }) {
           />
 
           <div className="btn-group" style={{ marginTop: 12 }}>
-            {step === 1 && <button className="btn" onClick={captureFace}>📷 Gesicht aufnehmen</button>}
-            {step >= 2 && <button className="btn secondary" onClick={resetFace}>↩ Gesicht neu aufnehmen</button>}
-            {step === 2 && <button className="btn" onClick={captureId}>🪪 Ausweis aufnehmen</button>}
-            {step >= 3 && <button className="btn secondary" onClick={resetId}>↩ Ausweis neu aufnehmen</button>}
+            {step === 1 && <button className="btn" onClick={captureFace}>📷 Capture Face</button>}
+            {step >= 2 && <button className="btn secondary" onClick={resetFace}>↩ Retake Face</button>}
+            {step === 2 && <button className="btn" onClick={captureId}>🪪 Capture ID</button>}
+            {step >= 3 && <button className="btn secondary" onClick={resetId}>↩ Retake ID</button>}
             <button
               className="btn warning"
               onClick={verifyNow}
               disabled={!faceDataUrl || !idDataUrl || verifying}
             >
-              🔍 Vergleichen
+              🔍 Compare
             </button>
-            <button className="btn secondary" onClick={requestHelp} title="Provider um manuelle Prüfung bitten">
-              🆘 Hilfe anfordern
+            <button className="btn secondary" onClick={requestHelp} title="Request manual check from provider">
+              🆘 Request Help
             </button>
             <button
               className={verified ? "btn success" : "btn secondary"}
               onClick={() => joinExam(selectedExam.id)}
               disabled={!verified || joining}
-              title={verified ? "Bereit – Identität bestätigt" : "Aktiviert nach erfolgreicher Verifikation"}
+              title={verified ? "Ready – identity confirmed" : "Enabled after successful verification"}
             >
               <span className="row" style={{ alignItems: "center" }}>
                 <span
@@ -273,18 +273,18 @@ function JoinExam({ onJoined }) {
                     boxShadow: verified ? "0 0 0 6px rgba(22,163,74,.18)" : "none"
                   }}
                 />
-                {verified ? "✅ Prüfung beitreten" : "Prüfung beitreten"}
+                {verified ? "✅ Join Exam" : "Join Exam"}
               </span>
             </button>
           </div>
 
           <div className="row" style={{ marginTop: 16 }}>
-            <Preview title="Gesicht" dataUrl={faceDataUrl} />
-            <Preview title="Ausweis" dataUrl={idDataUrl} />
+            <Preview title="Face" dataUrl={faceDataUrl} />
+            <Preview title="ID" dataUrl={idDataUrl} />
           </div>
 
           <div style={{ marginTop: 16 }}>
-            {verifying && <p className="subtle">⏳ Überprüfung läuft …</p>}
+            {verifying && <p className="subtle">⏳ Verification in progress …</p>}
             {message && (
               <div className="card" style={{ borderColor: verified ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)" }}>
                 <div className="row" style={{ alignItems: "center" }}>
@@ -314,13 +314,13 @@ function JoinExam({ onJoined }) {
                     marginBottom: 8,
                   }}
                 >
-                  <Pill label="Gesicht erkannt" ok={details.face_detected_live} />
-                  <Pill label="Ausweisfoto erkannt" ok={details.face_detected_id} />
-                  <Pill label="Gesichter matchen" ok={details.verified} />
+                  <Pill label="Face detected" ok={details.face_detected_live} />
+                  <Pill label="ID photo detected" ok={details.face_detected_id} />
+                  <Pill label="Faces match" ok={details.verified} />
                 </div>
                 {details.distance !== undefined && (
                   <p style={{ margin: 0 }} className="subtle">
-                    Distanz: <b>{details.distance?.toFixed(2)}</b> (Schwelle: {details.threshold})
+                    Distance: <b>{details.distance?.toFixed(2)}</b> (Threshold: {details.threshold})
                   </p>
                 )}
                 {details.hints?.length > 0 ? (
@@ -331,7 +331,7 @@ function JoinExam({ onJoined }) {
                   </ul>
                 ) : (
                   <p style={{ margin: 0, color: "#6b7280" }}>
-                    Tipps erscheinen hier, wenn etwas fehlt (Beleuchtung, Schärfe, Position …)
+                    Tips appear here if something is missing (lighting, sharpness, position …)
                   </p>
                 )}
               </div>
@@ -363,7 +363,7 @@ function Preview({ title, dataUrl }) {
         {dataUrl ? (
           <img src={dataUrl} alt={title} style={{ width: "100%" }} />
         ) : (
-          <span style={{ color: "var(--muted)" }}>noch kein Bild</span>
+          <span style={{ color: "var(--muted)" }}>no image yet</span>
         )}
       </div>
     </div>

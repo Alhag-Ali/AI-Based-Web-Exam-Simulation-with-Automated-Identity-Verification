@@ -54,7 +54,7 @@ function App() {
         <div className="bg-orb orb-b" />
         <div className="bg-orb orb-c" />
         <div className="container">
-          <div className="card">Lade...</div>
+          <div className="card">Loading...</div>
         </div>
       </div>
     );
@@ -69,8 +69,8 @@ function App() {
         <TopBar isStaff={isStaff} viewMode={viewMode} />
         <div className="container">
           <div className="hero card">
-            <div className="hero-title">Pruefungsmodus</div>
-            <div className="hero-subtle">Fokussiertes Layout mit Timer, Fragen und Fortschritt.</div>
+            <div className="hero-title">Exam Mode</div>
+            <div className="hero-subtle">Focused layout with timer, questions and progress.</div>
           </div>
           <ExamPage exam={currentExam} onExit={() => setCurrentExam(null)} />
         </div>
@@ -92,17 +92,17 @@ function App() {
         <div className="hero card">
           <div className="hero-title">
             {viewMode === "staff"
-              ? (profTab === "dashboard" ? "Professor Dashboard" : "Neue Prüfung erstellen")
-              : studentTab === "learn" ? "Lernbereich" : "Student Dashboard"}
+              ? (profTab === "dashboard" ? "Professor Dashboard" : "Create New Exam")
+              : studentTab === "learn" ? "Learning Area" : "Student Dashboard"}
           </div>
           <div className="hero-subtle">
             {viewMode === "staff"
               ? (profTab === "dashboard"
-                  ? "Übersicht aller Prüfungen, Teilnehmer und Statistiken."
-                  : "Prüfung erstellen und Fragen mit KI-RAG generieren.")
+                  ? "Overview of all exams, participants and statistics."
+                  : "Create an exam and generate questions with AI-RAG.")
               : studentTab === "learn"
-              ? "Lade Vorlesungsfolien hoch — erhalte Lernplan und Karteikarten."
-              : "Wähle eine Prüfung, verifiziere dich und starte direkt."}
+              ? "Upload lecture slides — get a study plan and flashcards."
+              : "Select an exam, verify your identity and start immediately."}
           </div>
         </div>
 
@@ -140,10 +140,10 @@ function TopBar({ isStaff, viewMode, studentTab, onStudentTabChange, profTab, on
           {viewMode === "student" && (
             <div className="mode-switch">
               <button className={`mode-btn ${studentTab === "exams" ? "active" : ""}`} onClick={() => onStudentTabChange("exams")}>
-                Prüfungen
+                Exams
               </button>
               <button className={`mode-btn ${studentTab === "learn" ? "active" : ""}`} onClick={() => onStudentTabChange("learn")}>
-                Lernen
+                Learn
               </button>
             </div>
           )}
@@ -153,12 +153,12 @@ function TopBar({ isStaff, viewMode, studentTab, onStudentTabChange, profTab, on
                 📊 Dashboard
               </button>
               <button className={`mode-btn ${profTab === "create" ? "active" : ""}`} onClick={() => onProfTabChange("create")}>
-                ➕ Neue Prüfung
+                ➕ New Exam
               </button>
             </div>
           )}
           <span className="badge">{isStaff ? "Professor" : "Student"}</span>
-          <button className="btn secondary" onClick={logout}>Abmelden</button>
+          <button className="btn secondary" onClick={logout}>Sign Out</button>
         </div>
       </div>
     </div>

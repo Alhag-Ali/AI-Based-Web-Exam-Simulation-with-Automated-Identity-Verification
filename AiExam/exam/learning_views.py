@@ -149,7 +149,7 @@ def _extract_key_concepts(raw_text):
 def upload_lecture_slide(request):
     pdf_file = request.FILES.get('pdf_file')
     if not pdf_file:
-        return Response({'error': 'Keine Datei übermittelt.'}, status=400)
+        return Response({'error': 'No file submitted.'}, status=400)
     if not pdf_file.name.lower().endswith('.pdf'):
         return Response({'error': 'Nur PDF-Dateien werden akzeptiert.'}, status=400)
 
@@ -167,11 +167,11 @@ def upload_lecture_slide(request):
         text, page_count = _extract_text_from_pdf(pdf_path)
     except Exception as e:
         os.remove(pdf_path)
-        return Response({'error': f'PDF konnte nicht gelesen werden: {str(e)}'}, status=400)
+        return Response({'error': f'PDF could not be read: {str(e)}'}, status=400)
 
     if len(text.strip()) < 80:
         os.remove(pdf_path)
-        return Response({'error': 'Die PDF enthält zu wenig Text. Bitte eine andere Datei hochladen.'}, status=400)
+        return Response({'error': 'The PDF contains too little text. Please upload a different file.'}, status=400)
 
     slide = LectureSlide.objects.create(
         student=request.user,
@@ -198,10 +198,10 @@ def create_learning_plan(request, slide_id):
     try:
         slide = LectureSlide.objects.get(id=slide_id, student=request.user)
     except LectureSlide.DoesNotExist:
-        return Response({'error': 'Foliensatz nicht gefunden.'}, status=404)
+        return Response({'error': 'Slide set not found.'}, status=404)
 
     if slide.status != 'ready':
-        return Response({'error': 'Foliensatz wird noch verarbeitet.'}, status=400)
+        return Response({'error': 'Slide set is still being processed.'}, status=400)
 
     plan = LearningPlan.objects.create(
         student=request.user,
@@ -273,7 +273,7 @@ def get_learning_plan(request, plan_id):
             id=plan_id, student=request.user
         )
     except LearningPlan.DoesNotExist:
-        return Response({'error': 'Lernplan nicht gefunden.'}, status=404)
+        return Response({'error': 'Study plan not found.'}, status=404)
 
     topics = list(plan.topics.values('id', 'title', 'summary', 'key_concepts', 'order', 'status'))
     return Response({
@@ -297,9 +297,9 @@ def _generate_flashcards(topic):
     sentences = [s.strip() for s in sentences if 40 < len(s.strip()) < 350]
 
     def_patterns = [
-        (r'(.{4,60})\s+(?:ist|sind|bezeichnet|bedeutet|beschreibt)\s+(.{15,250})', "Was ist {term}?", "{definition}"),
-        (r'(.{4,60})\s*:\s*(.{15,250})', 'Was versteht man unter "{term}"?', "{definition}"),
-        (r'(?:Der|Die|Das)\s+(.{4,50})\s+(?:ist|sind|ermöglicht|beschreibt)\s+(.{15,200})', "Was ist {term}?", "{definition}"),
+        (r'(.{4,60})\s+(?:is|are|means|refers to|describes|ist|sind|bezeichnet|bedeutet|beschreibt)\s+(.{15,250})', "What is {term}?", "{definition}"),
+        (r'(.{4,60})\s*:\s*(.{15,250})', 'What is meant by "{term}"?', "{definition}"),
+        (r'(?:The|Der|Die|Das)\s+(.{4,50})\s+(?:is|are|enables|describes|ist|sind|ermöglicht|beschreibt)\s+(.{15,200})', "What is {term}?", "{definition}"),
     ]
 
     used_questions = set()
@@ -319,7 +319,7 @@ def _generate_flashcards(topic):
                 break
 
     for concept in concepts[:6]:
-        q = f"Was ist {concept}?"
+        q = f"What is {concept}?"
         if q not in used_questions:
             relevant = next(
                 (s for s in sentences if concept.lower() in s.lower()),
@@ -342,14 +342,14 @@ def _generate_flashcards(topic):
         if not blank_word:
             continue
         masked = sent.replace(blank_word, "___", 1)
-        q = f"Fülle die Lücke aus:\n{masked}"
+        q = f"Fill in the blank:\n{masked}"
         if q not in used_questions:
             used_questions.add(q)
             cards.append({'question': q, 'answer': blank_word})
 
     if not cards:
         for i, sent in enumerate(sentences[:8]):
-            q = 'Was beschreibt folgender Satz?\n"' + sent[:120] + '..."'
+            q = 'What does the following sentence describe?\n"' + sent[:120] + '..."'
             cards.append({'question': q, 'answer': sent})
 
     return cards[:15]
@@ -363,7 +363,7 @@ def generate_flashcards(request, topic_id):
             id=topic_id, plan__student=request.user
         )
     except LearningTopic.DoesNotExist:
-        return Response({'error': 'Thema nicht gefunden.'}, status=404)
+        return Response({'error': 'Topic not found.'}, status=404)
 
     Flashcard.objects.filter(topic=topic).delete()
 
@@ -395,7 +395,7 @@ def get_flashcards(request, topic_id):
             id=topic_id, plan__student=request.user
         )
     except LearningTopic.DoesNotExist:
-        return Response({'error': 'Thema nicht gefunden.'}, status=404)
+        return Response({'error': 'Topic not found.'}, status=404)
 
     cards = list(topic.flashcards.values('id', 'question', 'answer', 'order', 'known'))
     return Response({
@@ -414,7 +414,7 @@ def mark_flashcard(request, card_id):
             id=card_id, topic__plan__student=request.user
         )
     except Flashcard.DoesNotExist:
-        return Response({'error': 'Karte nicht gefunden.'}, status=404)
+        return Response({'error': 'Card not found.'}, status=404)
 
     card.known = request.data.get('known', card.known)
     card.save()

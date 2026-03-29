@@ -28,14 +28,14 @@ class LoginView(APIView):
 
         if not email or not password:
             return Response(
-                {"error": "E-Mail und Passwort sind erforderlich."},
+                {"error": "Email and password are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         user = authenticate(request, email=email, password=password)
         if user is None:
             return Response(
-                {"error": "Ungültige Anmeldedaten."},
+                {"error": "Invalid credentials."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
@@ -140,10 +140,10 @@ class JoinExamView(APIView):
                     {
                         "error": "not_enrolled",
                         "message": (
-                            f"Sie sind nicht für diese Prüfung zugelassen. "
-                            f"Ihre Matrikelnummer ({student_matrikel or 'unbekannt'}) "
-                            f"befindet sich nicht in der Zulassungsliste. "
-                            f"Bitte wenden Sie sich an den Professor."
+                            f"You are not authorized for this exam. "
+                            f"Your matriculation number ({student_matrikel or 'unknown'}) "
+                            f"is not on the enrollment list. "
+                            f"Please contact the professor."
                         ),
                     },
                     status=status.HTTP_403_FORBIDDEN,
@@ -174,7 +174,7 @@ def verify_identity(request):
     id_image   = request.FILES.get("id_image")
 
     if not live_image or not id_image:
-        return Response({"verified": False, "message": "Beide Bilder sind erforderlich."}, status=400)
+        return Response({"verified": False, "message": "Both images are required."}, status=400)
 
     def to_cv(fileobj):
         buf = np.asarray(bytearray(fileobj.read()), dtype=np.uint8)
@@ -197,8 +197,8 @@ def verify_identity(request):
             "verified": False,
             "face_detected_live": False,
             "face_detected_id": len(id_faces) > 0,
-            "message": "Kein Gesicht im Live-Bild erkannt.",
-            "hints": ["Direkt in die Kamera schauen", "Licht von vorne", "Kamera näher ans Gesicht"]
+            "message": "No face detected in the live image.",
+            "hints": ["Look directly into the camera", "Light from the front", "Move camera closer to face"]
         }, status=200)
 
     if len(id_faces) == 0:
@@ -206,8 +206,8 @@ def verify_identity(request):
             "verified": False,
             "face_detected_live": True,
             "face_detected_id": False,
-            "message": "Kein Gesicht im Ausweisfoto erkannt.",
-            "hints": ["Karte gerader halten", "Foto auf Karte vollständig zeigen", "Reflexion vermeiden"]
+            "message": "No face detected in the ID photo.",
+            "hints": ["Hold card straighter", "Show photo on card fully", "Avoid reflections"]
         }, status=200)
 
     live_faces_sorted = sorted(live_faces, key=lambda f: f["facial_area"]["w"]*f["facial_area"]["h"], reverse=True)
@@ -225,7 +225,7 @@ def verify_identity(request):
             enforce_detection=False
         )
     except Exception as e:
-        return Response({"verified": False, "message": f"Fehler beim Vergleich: {e}"}, status=500)
+        return Response({"verified": False, "message": f"Error during comparison: {e}"}, status=500)
 
     distance = float(result.get("distance", 1.0))
     verified = distance <= MATCH_THRESHOLD
@@ -233,9 +233,9 @@ def verify_identity(request):
     hints = []
     if not verified:
         hints = [
-            "Karte näher und ruhiger halten (ID-Foto größer/schärfer im Bild).",
-            "Gesicht frontal ausrichten, ähnlich wie am Ausweisfoto.",
-            "Gegenlicht vermeiden; gleichmäßige Beleuchtung."
+            "Hold card closer and steadier (ID photo larger/sharper in image).",
+            "Align face frontally, similar to the ID photo.",
+            "Avoid backlighting; use even illumination."
         ]
 
     return Response({
@@ -245,7 +245,7 @@ def verify_identity(request):
         "model": MODEL,
         "face_detected_live": True,
         "face_detected_id": True,
-        "message": ("✅ Identität bestätigt." if verified else f"Gesichter stimmen nicht ausreichend überein (Distanz {distance:.2f})."),
+        "message": ("✅ Identity confirmed." if verified else f"Faces do not match sufficiently (distance {distance:.2f})."),
         "hints": hints
     }, status=200)
 
@@ -555,7 +555,7 @@ def upload_pdf_and_generate_questions(request, exam_id):
         if not all_text.strip() or total_text_length < 100:
             os.remove(temp_pdf_path)
             return Response(
-                {"error": "Konnte keinen Text aus der PDF-Datei extrahieren. Die PDF-Datei könnte gescannt (nur Bilder) oder verschlüsselt sein. Bitte stellen Sie sicher, dass die PDF-Datei Text enthält."},
+                {"error": "Could not extract text from the PDF file. The PDF may be scanned (images only) or encrypted. Please ensure the PDF contains text."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -567,7 +567,7 @@ def upload_pdf_and_generate_questions(request, exam_id):
         if len(questions) == 0:
             os.remove(temp_pdf_path)
             return Response(
-                {"error": "Es konnten keine Fragen aus der PDF-Datei generiert werden. Bitte stellen Sie sicher, dass die PDF-Datei ausreichend Text enthält."},
+                {"error": "No questions could be generated from the PDF file. Please ensure the PDF contains sufficient text."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -612,8 +612,8 @@ def generate_questions_from_text(text, num_questions=10):
     text = text.strip()
     if not text or len(text) < 50:
         return [{
-            "text": "Die PDF-Datei enthält nicht genug Text. Bitte stellen Sie sicher, dass die PDF-Datei Text enthält (nicht nur Bilder).",
-            "options": ["OK", "Wiederholen", "Abbrechen", "Weiter"],
+            "text": "The PDF file does not contain enough text. Please ensure the PDF contains text (not only images).",
+            "options": ["OK", "Retry", "Cancel", "Continue"],
             "answer": "OK"
         }]
     
@@ -657,7 +657,7 @@ def generate_questions_from_text(text, num_questions=10):
     definitions = []
     for sentence in sentences:
         lower_s = sentence.lower()
-        if any(word in lower_s for word in ['ist', 'sind', 'bedeutet', 'bezeichnet', 'beschreibt', 'definiert']):
+        if any(word in lower_s for word in ['is', 'are', 'means', 'refers', 'describes', 'defined', 'ist', 'sind', 'bedeutet', 'bezeichnet', 'beschreibt', 'definiert']):
             if 40 < len(sentence) < 250:
                 if not any(ex in sentence for ex in excluded_terms):
                     definitions.append(sentence)
@@ -688,12 +688,12 @@ def generate_questions_from_text(text, num_questions=10):
             clean_def = re.sub(r'\s+', ' ', definition).strip()[:200]
             
             question = {
-                "text": f"Was bedeutet '{concept}'?" if concept else "Was ist die Definition?",
+                "text": f"What does '{concept}' mean?" if concept else "What is the definition?",
                 "options": [
                     clean_def,
-                    f"{concept} ist eine Methode zur Datenverarbeitung." if concept else "Es ist eine Methode.",
-                    f"{concept} ist ein Algorithmus." if concept else "Es ist ein Algorithmus.",
-                    f"{concept} ist eine Datenstruktur." if concept else "Es ist eine Datenstruktur."
+                    f"{concept} is a method for data processing." if concept else "It is a method.",
+                    f"{concept} is an algorithm." if concept else "It is an algorithm.",
+                    f"{concept} is a data structure." if concept else "It is a data structure."
                 ],
                 "answer": clean_def
             }
@@ -725,12 +725,12 @@ def generate_questions_from_text(text, num_questions=10):
             summary = para_clean[:250] + "..." if len(para_clean) > 250 else para_clean
             
             question = {
-                "text": f"Was ist {main_concept}?",
+                "text": f"What is {main_concept}?",
                 "options": [
                     summary,
-                    f"{main_concept} ist eine Programmiersprache.",
-                    f"{main_concept} ist ein Betriebssystem.",
-                    f"{main_concept} ist nicht im Material definiert."
+                    f"{main_concept} is a programming language.",
+                    f"{main_concept} is an operating system.",
+                    f"{main_concept} is not defined in the material."
                 ],
                 "answer": summary
             }
@@ -744,12 +744,12 @@ def generate_questions_from_text(text, num_questions=10):
             clean_context = re.sub(r'\s+', ' ', context).strip()[:200]
             
             question = {
-                "text": f"Was ist {concept}?",
+                "text": f"What is {concept}?",
                 "options": [
                     clean_context,
-                    f"{concept} ist eine Methode.",
-                    f"{concept} ist ein Algorithmus.",
-                    f"{concept} ist nicht definiert."
+                    f"{concept} is a method.",
+                    f"{concept} is an algorithm.",
+                    f"{concept} is not defined."
                 ],
                 "answer": clean_context
             }
@@ -763,12 +763,12 @@ def generate_questions_from_text(text, num_questions=10):
                 clean_sentence = sentence[:200] + "..." if len(sentence) > 200 else sentence
                 
                 question = {
-                    "text": f"Welche Aussage ist korrekt?",
+                    "text": f"Which statement is correct?",
                     "options": [
                         clean_sentence,
-                        "Die Aussage ist teilweise korrekt.",
-                        "Die Aussage ist falsch.",
-                        "Die Aussage benötigt mehr Kontext."
+                        "The statement is partially correct.",
+                        "The statement is incorrect.",
+                        "The statement needs more context."
                     ],
                     "answer": clean_sentence
                 }
@@ -780,8 +780,8 @@ def generate_questions_from_text(text, num_questions=10):
     
     if len(questions) == 0:
         questions.append({
-            "text": "Es konnten keine Fragen aus der PDF-Datei generiert werden. Bitte stellen Sie sicher, dass die PDF-Datei Text enthält.",
-            "options": ["OK", "Wiederholen", "Abbrechen", "Weiter"],
+            "text": "No questions could be generated from the PDF file. Please ensure the PDF contains text.",
+            "options": ["OK", "Retry", "Cancel", "Continue"],
             "answer": "OK"
         })
     
@@ -917,7 +917,7 @@ def request_manual_check(request):
 @permission_classes([IsAuthenticated])
 def professor_dashboard(request):
     if not request.user.is_staff:
-        return Response({"error": "Nur Staff-Mitglieder dürfen auf das Dashboard zugreifen."}, status=403)
+        return Response({"error": "Only staff members may access the dashboard."}, status=403)
 
     exams = Exam.objects.filter(created_by=request.user).order_by('-created_at')
 
@@ -987,12 +987,12 @@ def professor_dashboard(request):
 @permission_classes([IsAuthenticated])
 def exam_enrollments(request, exam_id):
     if not request.user.is_staff:
-        return Response({"error": "Nur Professoren dürfen Zulassungslisten verwalten."}, status=403)
+        return Response({"error": "Only professors may manage enrollment lists."}, status=403)
 
     try:
         exam = Exam.objects.get(id=exam_id, created_by=request.user)
     except Exam.DoesNotExist:
-        return Response({"error": "Prüfung nicht gefunden."}, status=404)
+        return Response({"error": "Exam not found."}, status=404)
 
     if request.method == 'GET':
         entries = ExamEnrollment.objects.filter(exam=exam)
@@ -1036,12 +1036,12 @@ def exam_enrollments(request, exam_id):
 @permission_classes([IsAuthenticated])
 def exam_enrollment_detail(request, exam_id, matrikel):
     if not request.user.is_staff:
-        return Response({"error": "Nur Professoren dürfen Zulassungslisten verwalten."}, status=403)
+        return Response({"error": "Only professors may manage enrollment lists."}, status=403)
 
     try:
         exam = Exam.objects.get(id=exam_id, created_by=request.user)
     except Exam.DoesNotExist:
-        return Response({"error": "Prüfung nicht gefunden."}, status=404)
+        return Response({"error": "Exam not found."}, status=404)
 
     try:
         enrollment = ExamEnrollment.objects.get(exam=exam, matriculation_number=matrikel)

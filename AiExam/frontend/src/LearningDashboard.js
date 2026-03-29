@@ -24,7 +24,7 @@ export default function LearningDashboard() {
       setPlans(res.data);
       if (res.data.length > 0 && !activePlan) setActivePlan(res.data[0]);
     } catch {
-      setMsg({ type: "error", text: "Fehler beim Laden." });
+      setMsg({ type: "error", text: "Error loading." });
     }
   };
 
@@ -32,10 +32,10 @@ export default function LearningDashboard() {
 
   const handleFile = async (file) => {
     if (!file?.name?.toLowerCase().endsWith(".pdf")) {
-      setMsg({ type: "error", text: "Nur PDF-Dateien werden akzeptiert." });
+      setMsg({ type: "error", text: "Only PDF files are accepted." });
       return;
     }
-    setMsg({ type: "info", text: "PDF wird analysiert…" });
+    setMsg({ type: "info", text: "Analysing PDF…" });
     setUploading(true);
     const form = new FormData();
     form.append("pdf_file", file);
@@ -46,16 +46,16 @@ export default function LearningDashboard() {
       const slide = uploadRes.data;
       setUploading(false);
       setCreatingPlan(true);
-      setMsg({ type: "info", text: `"${slide.title}" hochgeladen. Lernplan wird erstellt…` });
+      setMsg({ type: "info", text: `"${slide.title}" uploaded. Creating study plan…` });
       const planRes = await axios.post(`${API}/learn/slides/${slide.id}/create-plan/`, {}, { headers });
       setCreatingPlan(false);
       setActivePlan(planRes.data);
-      setMsg({ type: "success", text: `Fertig! ${planRes.data.topic_count} Themen erkannt.` });
+      setMsg({ type: "success", text: `Done! ${planRes.data.topic_count} topics detected.` });
       fetchPlans();
     } catch (err) {
       setUploading(false);
       setCreatingPlan(false);
-      setMsg({ type: "error", text: err.response?.data?.error || "Fehler beim Verarbeiten." });
+      setMsg({ type: "error", text: err.response?.data?.error || "Error processing file." });
     }
   };
 
@@ -85,16 +85,16 @@ export default function LearningDashboard() {
         {busy ? (
           <div className="learn-dropzone-inner">
             <div className="learn-spinner" />
-            <p className="learn-dropzone-label">{uploading ? "PDF wird analysiert…" : "Lernplan + Karteikarten werden erstellt…"}</p>
-            <p className="learn-dropzone-hint">Das kann einige Sekunden dauern.</p>
+            <p className="learn-dropzone-label">{uploading ? "Analysing PDF…" : "Creating study plan + flashcards…"}</p>
+            <p className="learn-dropzone-hint">This may take a few seconds.</p>
           </div>
         ) : (
           <div className="learn-dropzone-inner">
             <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
             <p className="learn-dropzone-label">
-              PDF hierher ziehen oder <span className="learn-link">Datei auswählen</span>
+              Drag PDF here or <span className="learn-link">select file</span>
             </p>
-            <p className="learn-dropzone-hint">Vorlesungsfolien, Skripte oder Kapitel als PDF hochladen</p>
+            <p className="learn-dropzone-hint">Upload lecture slides, scripts or chapters as PDF</p>
           </div>
         )}
       </div>
@@ -110,7 +110,7 @@ export default function LearningDashboard() {
 
       {plans.length > 1 && (
         <div className="learn-plan-selector">
-          <p className="subtle" style={{ margin: "0 0 8px", fontSize: 13 }}>Meine Lernpläne</p>
+          <p className="subtle" style={{ margin: "0 0 8px", fontSize: 13 }}>My Study Plans</p>
           <div className="learn-plan-tabs">
             {plans.map(p => (
               <button
@@ -133,7 +133,7 @@ export default function LearningDashboard() {
               <div>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{activePlan.plan_title}</div>
                 <div className="subtle" style={{ fontSize: 13, marginTop: 3 }}>
-                  {activePlan.slide_title} · {activePlan.slide_pages} Seiten · {activePlan.topic_count} Themen
+                  {activePlan.slide_title} · {activePlan.slide_pages} pages · {activePlan.topic_count} topics
                 </div>
               </div>
               <div style={{
@@ -150,18 +150,18 @@ export default function LearningDashboard() {
             <div className="learn-progress-stats" style={{ marginTop: 10 }}>
               <span className="learn-stat">
                 <span className="learn-stat-dot" style={{ background: "var(--success)" }} />
-                {completedCount} abgeschlossen
+                {completedCount} completed
               </span>
               <span className="learn-stat">
                 <span className="learn-stat-dot" style={{ background: "rgba(255,255,255,0.25)" }} />
-                {activePlan.topics.filter(t => t.status === "open").length} offen
+                {activePlan.topics.filter(t => t.status === "open").length} open
               </span>
             </div>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, opacity: 0.8 }}>
-              🃏 Themen &amp; Karteikarten
+              🃏 Topics &amp; Flashcards
             </h3>
             <div className="learn-topics-grid">
               {activePlan.topics.map((topic, i) => {
@@ -199,7 +199,7 @@ export default function LearningDashboard() {
                       style={{ marginTop: 12, width: "100%", fontSize: 13 }}
                       onClick={(e) => { e.stopPropagation(); setFlashcardTopic(topic); }}
                     >
-                      🃏 Karteikarten lernen
+                      🃏 Study Flashcards
                     </button>
                   </div>
                 );
@@ -213,9 +213,9 @@ export default function LearningDashboard() {
       {plans.length === 0 && !busy && (
         <div className="card" style={{ textAlign: "center", padding: "48px 24px", opacity: 0.7 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📚</div>
-          <p style={{ fontWeight: 600, margin: "0 0 6px" }}>Noch keine Folien hochgeladen</p>
+          <p style={{ fontWeight: 600, margin: "0 0 6px" }}>No slides uploaded yet</p>
           <p className="subtle" style={{ fontSize: 13 }}>
-            Lade oben eine PDF-Datei hoch — das System erstellt automatisch Themen und Karteikarten.
+            Upload a PDF file above — the system automatically creates topics and flashcards.
           </p>
         </div>
       )}
