@@ -1,12 +1,35 @@
 import os
 import re
 
-PROMPT_TEMPLATE = """
+# ── Prompt templates (one per language) ──────────────────────────────────────
+
+PROMPT_EN = """
+You are a university professor. Create ONE multiple-choice exam question based on the given topic and context.
+
+Topic: "{query}"
+
+Use ONLY the following context:
+
+{context}
+
+Answer EXACTLY in this format:
+**Question:**
+[Your question here]
+
+A) [Answer A]
+B) [Answer B]
+C) [Answer C]
+D) [Answer D]
+
+Correct answer: [Letter A, B, C or D]
+"""
+
+PROMPT_DE = """
 Du bist ein Universitätsprofessor. Erstelle EINE Multiple-Choice-Prüfungsfrage basierend auf dem angegebenen Thema und Kontext.
 
 Thema: "{query}"
 
-Verwende AUSSCHLIESSLICH den folgenden Kontext:
+Verwende NUR den folgenden Kontext:
 
 {context}
 
@@ -23,6 +46,40 @@ Korrekte Antwort: [Buchstabe A, B, C oder D]
 """
 
 
+def detect_language(text: str) -> str:
+    """
+    Lightweight language detector – no external package needed.
+    Returns 'de' for German, 'en' for English.
+    Counts how often very-common stopwords of each language appear in the
+    first 2 000 characters (enough to judge the dominant language).
+    """
+    sample = text[:2000].lower()
+    words  = re.findall(r"\b\w+\b", sample)
+    if not words:
+        return "en"
+
+    de_words = {
+        "der", "die", "das", "und", "ist", "mit", "von", "für",
+        "auf", "ein", "eine", "einer", "auch", "im", "den", "dem",
+        "an", "zu", "sich", "bei", "wie", "als", "des", "werden",
+        "durch", "nach", "oder", "nicht", "wird", "sind", "haben",
+        "kann", "wird", "zum", "zur", "über", "dass",
+    }
+    en_words = {
+        "the", "and", "of", "is", "in", "to", "for", "with",
+        "that", "are", "this", "it", "as", "an", "be", "by",
+        "or", "not", "from", "at", "has", "have", "can", "we",
+        "on", "its", "which", "their", "will", "all", "one",
+    }
+
+    de_count = sum(1 for w in words if w in de_words)
+    en_count = sum(1 for w in words if w in en_words)
+
+    lang = "de" if de_count > en_count else "en"
+    print(f"[RAG] language detection: de={de_count} en={en_count} → '{lang}'")
+    return lang
+
+
 def _parse_llm_output(text: str) -> dict:
     lines = [re.sub(r"\*+", "", l).strip() for l in text.strip().split("\n")]
     lines = [l for l in lines if l]
@@ -32,14 +89,17 @@ def _parse_llm_output(text: str) -> dict:
     answer_letter = None
 
     option_re = re.compile(r"^([A-D])[)\.]\s+(.+)$", re.IGNORECASE)
-    answer_re = re.compile(r"korrekte\s+antwort\s*:?\s*([A-D])", re.IGNORECASE)
+    answer_re = re.compile(
+        r"(?:correct\s+answer|korrekte\s+antwort|richtige\s+antwort)\s*:?\s*([A-D])",
+        re.IGNORECASE
+    )
 
     in_frage = False
 
     for line in lines:
-        if re.match(r"^frage\s*:", line, re.IGNORECASE):
+        if re.match(r"^(?:question|frage)\s*:", line, re.IGNORECASE):
             in_frage = True
-            rest = re.sub(r"^frage\s*:\s*", "", line, flags=re.IGNORECASE).strip()
+            rest = re.sub(r"^(?:question|frage)\s*:\s*", "", line, flags=re.IGNORECASE).strip()
             if rest:
                 question_lines.append(rest)
             continue
@@ -76,7 +136,8 @@ def _parse_llm_output(text: str) -> dict:
     return {"text": q_text, "options": options, "answer": answer}
 
 
-def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None, n_per_topic: int = 1) -> list:
+def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None,
+                           n_per_topic: int = 1, language: str = None) -> list:
     try:
         import chromadb
         from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -88,8 +149,8 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
         from langchain_core.output_parsers import StrOutputParser
     except ImportError as e:
         raise ImportError(
-            f"RAG-Pakete nicht installiert: {e}. "
-            "Bitte ausführen: pip install langchain-text-splitters langchain-community "
+            f"RAG packages not installed: {e}. "
+            "Please run: pip install langchain-text-splitters langchain-community "
             "sentence-transformers chromadb langchain-groq"
         )
 
@@ -97,7 +158,12 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
         os.environ["GROQ_API_KEY"] = groq_api_key
 
     if not os.environ.get("GROQ_API_KEY"):
-        raise ValueError("GROQ_API_KEY ist nicht gesetzt. Bitte API-Key angeben.")
+        raise ValueError("GROQ_API_KEY is not set. Please provide an API key.")
+
+    # Auto-detect language if not explicitly provided
+    lang = language if language in ("de", "en") else detect_language(pdf_text)
+    prompt_template = PROMPT_DE if lang == "de" else PROMPT_EN
+    print(f"[RAG] using prompt language: {lang}")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
@@ -120,7 +186,7 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
         max_retries=2,
     )
 
-    prompt = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
+    prompt = ChatPromptTemplate.from_template(prompt_template)
     chain = prompt | llm | StrOutputParser()
 
     questions = []
@@ -148,7 +214,7 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
 
                 top_docs = [doc for doc, _ in reranked[:3]]
                 context_str = "\n\n".join(
-                    f"--- Auszug {i + 1} ---\n{doc.page_content}"
+                    f"--- Excerpt {i + 1} ---\n{doc.page_content}"
                     for i, doc in enumerate(top_docs)
                 )
 
@@ -157,6 +223,6 @@ def generate_questions_rag(pdf_text: str, topics: list, groq_api_key: str = None
                 if q:
                     questions.append(q)
             except Exception as e:
-                print(f"[RAG] Fehler bei Thema '{topic}': {e}")
+                print(f"[RAG] Error for topic '{topic}': {e}")
 
     return questions

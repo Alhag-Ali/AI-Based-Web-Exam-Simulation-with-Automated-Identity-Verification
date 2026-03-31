@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Erstellt Demo-Accounts für Studenten und einen Staff-Account (Professor)."""
+"""Creates demo accounts for students and a staff account (professor)."""
 import os
 import django
 
@@ -23,6 +23,7 @@ def main():
         else:
             print(f"Exists: {u['email']}")
     print("Demo accounts ready.")
+
 
 if __name__ == "__main__":
     main()

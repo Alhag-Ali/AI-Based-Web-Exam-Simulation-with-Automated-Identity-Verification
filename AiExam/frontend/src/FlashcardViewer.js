@@ -88,7 +88,7 @@ function FlashcardViewer({ topic, onClose }) {
         <div className="fc-modal">
           <div className="fc-loading">
             <div className="learn-spinner" />
-            <p>{generating ? "Karteikarten werden erstellt…" : "Lade Karten…"}</p>
+            <p>{generating ? "Creating flashcards…" : "Loading cards…"}</p>
           </div>
         </div>
       </div>
@@ -104,8 +104,8 @@ function FlashcardViewer({ topic, onClose }) {
             <button className="fc-close" onClick={onClose}>✕</button>
           </div>
           <div className="fc-empty">
-            <p>Keine Karteikarten für dieses Thema generierbar.</p>
-            <button className="btn secondary" onClick={onClose}>Schließen</button>
+            <p>No flashcards can be generated for this topic.</p>
+            <button className="btn secondary" onClick={onClose}>Close</button>
           </div>
         </div>
       </div>
@@ -121,10 +121,10 @@ function FlashcardViewer({ topic, onClose }) {
 
         <div className="fc-header">
           <div>
-            <div className="fc-topic-label">Thema</div>
+            <div className="fc-topic-label">Topic</div>
             <h3 className="fc-topic-title">{topic.title}</h3>
           </div>
-          <button className="fc-close" onClick={onClose} title="Schließen">✕</button>
+          <button className="fc-close" onClick={onClose} title="Close">✕</button>
         </div>
 
         <div className="fc-progress-row">
@@ -132,50 +132,50 @@ function FlashcardViewer({ topic, onClose }) {
           <div className="fc-progress-track">
             <div className="fc-progress-fill" style={{ width: `${progress}%` }} />
           </div>
-          <span className="fc-known-count">{knownCount} gewusst</span>
+          <span className="fc-known-count">{knownCount} known</span>
         </div>
 
         <div className="fc-scene" onClick={() => setFlipped(f => !f)}>
           <div className={`fc-card${flipped ? " flipped" : ""}`}>
             <div className="fc-face fc-front">
-              <div className="fc-face-label">Frage</div>
+              <div className="fc-face-label">Question</div>
               <div className="fc-face-text">{cleanText(card.question)}</div>
-              <div className="fc-hint">Klicken zum Umdrehen</div>
+              <div className="fc-hint">Click to flip</div>
             </div>
             <div className="fc-face fc-back">
-              <div className="fc-face-label">Antwort</div>
+              <div className="fc-face-label">Answer</div>
               <div className="fc-face-text">{cleanText(card.answer)}</div>
             </div>
           </div>
         </div>
 
         <div className="fc-actions">
-          <button className="btn secondary fc-nav" onClick={prev} disabled={index === 0}>← Zurück</button>
+          <button className="btn secondary fc-nav" onClick={prev} disabled={index === 0}>← Back</button>
 
           {flipped ? (
             <div className="fc-rating">
               <button className="btn danger fc-rating-btn" onClick={() => markKnown(false)}>
-                ✗ Noch nicht
+                ✗ Not yet
               </button>
               <button className="btn success fc-rating-btn" onClick={() => markKnown(true)}>
-                ✓ Gewusst
+                ✓ Got it
               </button>
             </div>
           ) : (
             <button className="btn fc-flip-btn" onClick={() => setFlipped(true)}>
-              Antwort zeigen
+              Show Answer
             </button>
           )}
 
-          <button className="btn secondary fc-nav" onClick={next} disabled={index === cards.length - 1}>Weiter →</button>
+          <button className="btn secondary fc-nav" onClick={next} disabled={index === cards.length - 1}>Next →</button>
         </div>
 
         {knownCount === cards.length && cards.length > 0 && (
           <div className="fc-complete">
             <span className="fc-complete-icon">🎉</span>
-            <span>Alle Karten gewusst!</span>
+            <span>All cards done!</span>
             <button className="btn secondary" style={{ padding: "6px 14px", fontSize: 13 }} onClick={restart}>
-              Wiederholen
+              Repeat
             </button>
           </div>
         )}
@@ -186,7 +186,7 @@ function FlashcardViewer({ topic, onClose }) {
               key={c.id}
               className={`fc-dot${i === index ? " active" : ""}${c.known ? " known" : ""}`}
               onClick={() => { setFlipped(false); setIndex(i); }}
-              title={`Karte ${i + 1}`}
+              title={`Card ${i + 1}`}
             />
           ))}
         </div>

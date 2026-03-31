@@ -22,12 +22,12 @@ function Login() {
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("isStaff", res.data.is_staff ? "true" : "false");
-      setMessage("Login erfolgreich!");
+      setMessage("Login successful!");
       setTimeout(() => {
         window.location.reload();
       }, 500);
     } catch (err) {
-      setMessage(err.response?.data?.error || "Fehler beim Login");
+      setMessage(err.response?.data?.error || "Login failed");
     }
   };
 
@@ -37,7 +37,7 @@ function Login() {
         <div className="stack-lg">
           <div className="section-title">
             <span className="emoji">🔐</span>
-            <h2 style={{ margin: 0 }}>Anmeldung</h2>
+            <h2 style={{ margin: 0 }}>Sign In</h2>
           </div>
 
           <form className="form" onSubmit={handleSubmit}>
@@ -46,18 +46,18 @@ function Login() {
               <input
                 className="input"
                 type="email"
-                placeholder="name@uni.de"
+                placeholder="name@university.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
             <div className="field">
-              <label className="subtle">Passwort</label>
+              <label className="subtle">Password</label>
               <input
                 className="input"
                 type="password"
-                placeholder="Passwort"
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -65,11 +65,11 @@ function Login() {
             </div>
             <div className="row">
               <button className="btn" type="submit">
-                Anmelden
+                Sign In
               </button>
             </div>
             {message && (
-              <div className={`card ${message.includes("erfolgreich") ? "success-box" : "error-box"}`} style={{ marginTop: 12 }}>
+              <div className={`card ${message.includes("successful") ? "success-box" : "error-box"}`} style={{ marginTop: 12 }}>
                 <p style={{ margin: 0 }}>{message}</p>
               </div>
             )}
@@ -80,11 +80,11 @@ function Login() {
         <div className="stack">
           <div className="section-title">
             <span className="emoji">💡</span>
-            <h3 style={{ margin: 0 }}>Hinweis</h3>
+            <h3 style={{ margin: 0 }}>Note</h3>
           </div>
           <p className="subtle" style={{ margin: 0 }}>
-            Melde dich mit deiner Unimail an. Das System erkennt automatisch,
-            ob du Student oder Professor bist.
+            Sign in with your university email. The system automatically detects
+            whether you are a student or a professor.
           </p>
         </div>
       </div>

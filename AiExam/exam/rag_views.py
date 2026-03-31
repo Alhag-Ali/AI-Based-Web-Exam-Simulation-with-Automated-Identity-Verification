@@ -14,12 +14,12 @@ from .models import Exam
 @parser_classes([MultiPartParser, FormParser])
 def rag_generate_questions(request, exam_id):
     if not request.user.is_staff:
-        return Response({"error": "Nur Staff-Mitglieder dürfen Fragen generieren."}, status=403)
+        return Response({"error": "Only staff members may generate questions."}, status=403)
 
     try:
         exam = Exam.objects.get(id=exam_id)
     except Exam.DoesNotExist:
-        return Response({"error": "Prüfung nicht gefunden."}, status=404)
+        return Response({"error": "Exam not found."}, status=404)
 
     pdf_file = request.FILES.get("pdf_file")
     topics_raw = request.data.get("topics", "")
@@ -27,14 +27,14 @@ def rag_generate_questions(request, exam_id):
     groq_api_key = request.data.get("groq_api_key", "").strip() or os.environ.get("GROQ_API_KEY", "")
 
     if not pdf_file:
-        return Response({"error": "Keine PDF-Datei hochgeladen."}, status=400)
+        return Response({"error": "No PDF file uploaded."}, status=400)
 
     if not pdf_file.name.lower().endswith(".pdf"):
-        return Response({"error": "Datei muss eine PDF-Datei sein."}, status=400)
+        return Response({"error": "File must be a PDF file."}, status=400)
 
     topics = [t.strip() for t in topics_raw.split("\n") if t.strip()]
     if not topics:
-        return Response({"error": "Bitte mindestens ein Thema angeben."}, status=400)
+        return Response({"error": "Please provide at least one topic."}, status=400)
 
     if n_per_topic < 1 or n_per_topic > 5:
         n_per_topic = 1
@@ -65,36 +65,44 @@ def rag_generate_questions(request, exam_id):
 
         if len(pdf_text.strip()) < 100:
             return Response(
-                {"error": "PDF-Text zu kurz oder konnte nicht extrahiert werden."},
+                {"error": "PDF text too short or could not be extracted."},
                 status=400,
             )
 
-        from .rag_service import generate_questions_rag
+        from .rag_service import generate_questions_rag, detect_language
+
+        detected_lang = detect_language(pdf_text)
 
         questions = generate_questions_rag(
             pdf_text=pdf_text,
             topics=topics,
             groq_api_key=groq_api_key,
             n_per_topic=n_per_topic,
+            language=detected_lang,
         )
 
         if not questions:
             return Response(
-                {"error": "Keine Fragen konnten generiert werden. Bitte Themen und PDF prüfen."},
+                {"error": "No questions could be generated. Please check the topics and PDF."},
                 status=422,
             )
 
+        lang_label = "German 🇩🇪" if detected_lang == "de" else "English 🇬🇧"
         return Response(
             {
                 "questions": questions,
                 "count": len(questions),
-                "message": f"{len(questions)} Frage(n) erfolgreich mit RAG generiert.",
+                "language": detected_lang,
+                "message": (
+                    f"{len(questions)} question(s) generated in {lang_label} "
+                    f"(detected from PDF)."
+                ),
             }
         )
 
     except ImportError as e:
-        return Response({"error": f"RAG-Pakete fehlen: {str(e)}"}, status=500)
+        return Response({"error": f"RAG packages missing: {str(e)}"}, status=500)
     except ValueError as e:
         return Response({"error": str(e)}, status=400)
     except Exception as e:
-        return Response({"error": f"Fehler bei der RAG-Generierung: {str(e)}"}, status=500)
+        return Response({"error": f"Error during RAG generation: {str(e)}"}, status=500)

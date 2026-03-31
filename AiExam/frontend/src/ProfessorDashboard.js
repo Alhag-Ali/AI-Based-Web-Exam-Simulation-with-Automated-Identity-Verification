@@ -23,7 +23,7 @@ function ProfessorDashboard({ onCreateExam }) {
     setLoading(true);
     axios.get(`${API}/professor/dashboard/`, { headers })
       .then(r => { setData(r.data); setError(null); })
-      .catch(e => setError(e.response?.data?.error || "Fehler beim Laden."))
+      .catch(e => setError(e.response?.data?.error || "Error loading data."))
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line
 
@@ -49,7 +49,7 @@ function ProfessorDashboard({ onCreateExam }) {
     if (!raw) return;
     const numbers = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
     if (!numbers.length) return;
-    setAddMsg(p => ({ ...p, [examId]: "Wird gespeichert..." }));
+    setAddMsg(p => ({ ...p, [examId]: "Saving..." }));
     try {
       const r = await axios.post(
         `${API}/exams/${examId}/enrollments/`,
@@ -58,23 +58,23 @@ function ProfessorDashboard({ onCreateExam }) {
       );
       const { added = [], skipped = [] } = r.data;
       let msg = "";
-      if (added.length) msg += `✅ ${added.length} hinzugefügt. `;
-      if (skipped.length) msg += `⚠️ ${skipped.length} bereits vorhanden.`;
+      if (added.length) msg += `✅ ${added.length} added. `;
+      if (skipped.length) msg += `⚠️ ${skipped.length} already exist.`;
       setAddMsg(p => ({ ...p, [examId]: msg || "OK" }));
       setAddInput(p => ({ ...p, [examId]: "" }));
       loadEnrollments(examId);
     } catch (e) {
-      setAddMsg(p => ({ ...p, [examId]: e.response?.data?.error || "Fehler." }));
+      setAddMsg(p => ({ ...p, [examId]: e.response?.data?.error || "Error." }));
     }
   };
 
   const handleDelete = async (examId, matrikel) => {
-    if (!window.confirm(`Matrikelnummer ${matrikel} entfernen?`)) return;
+    if (!window.confirm(`Remove matriculation number ${matrikel}?`)) return;
     try {
       await axios.delete(`${API}/exams/${examId}/enrollments/${encodeURIComponent(matrikel)}/`, { headers });
       loadEnrollments(examId);
     } catch (e) {
-      alert(e.response?.data?.error || "Fehler beim Löschen.");
+      alert(e.response?.data?.error || "Error deleting.");
     }
   };
 
@@ -93,11 +93,11 @@ function ProfessorDashboard({ onCreateExam }) {
       setEditRow(null);
       loadEnrollments(examId);
     } catch (e) {
-      alert(e.response?.data?.error || "Fehler beim Speichern.");
+      alert(e.response?.data?.error || "Error saving.");
     }
   };
 
-  if (loading) return <div className="card"><p className="subtle">Lade Dashboard …</p></div>;
+  if (loading) return <div className="card"><p className="subtle">Loading dashboard …</p></div>;
   if (error) return <div className="card" style={{ borderColor: "rgba(239,68,68,.35)" }}><p style={{ color: "#fecaca", margin: 0 }}>{error}</p></div>;
   if (!data) return null;
 
@@ -110,10 +110,10 @@ function ProfessorDashboard({ onCreateExam }) {
       {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
         {[
-          { label: "Prüfungen gesamt", value: data.total_exams, icon: "📋" },
-          { label: "Teilnehmer gesamt", value: data.total_participants, icon: "👥" },
-          { label: "Vergangene", value: pastExams, icon: "✅" },
-          { label: "Bevorstehende", value: upcomingExams, icon: "📅" },
+          { label: "Total Exams", value: data.total_exams, icon: "📋" },
+          { label: "Total Participants", value: data.total_participants, icon: "👥" },
+          { label: "Past", value: pastExams, icon: "✅" },
+          { label: "Upcoming", value: upcomingExams, icon: "📅" },
         ].map(s => (
           <div key={s.label} className="card" style={{ textAlign: "center", padding: "20px 12px" }}>
             <div style={{ fontSize: 28 }}>{s.icon}</div>
@@ -126,12 +126,12 @@ function ProfessorDashboard({ onCreateExam }) {
       {/* Exam list */}
       <div className="stack">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>Meine Prüfungen</h3>
-          <button className="btn" onClick={onCreateExam}>➕ Neue Prüfung</button>
+          <h3 style={{ margin: 0 }}>My Exams</h3>
+          <button className="btn" onClick={onCreateExam}>➕ New Exam</button>
         </div>
 
         {data.exams.length === 0 && (
-          <div className="card muted-box"><p className="subtle" style={{ margin: 0 }}>Noch keine Prüfungen erstellt.</p></div>
+          <div className="card muted-box"><p className="subtle" style={{ margin: 0 }}>No exams created yet.</p></div>
         )}
 
         {data.exams.map(exam => {
@@ -156,14 +156,14 @@ function ProfessorDashboard({ onCreateExam }) {
                       color: exam.is_past ? "#94a3b8" : "#22c55e",
                       border: exam.is_past ? "1px solid rgba(100,116,139,.3)" : "1px solid rgba(34,197,94,.3)",
                     }}>
-                      {exam.is_past ? "Abgeschlossen" : "Bevorstehend"}
+                      {exam.is_past ? "Completed" : "Upcoming"}
                     </span>
                   </div>
                   <div className="subtle" style={{ fontSize: 13, marginTop: 4 }}>
-                    📅 {examDate.toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                    &nbsp;·&nbsp; ⏱ {exam.duration_minutes} Min.
-                    &nbsp;·&nbsp; ❓ {exam.question_count} Fragen
-                    &nbsp;·&nbsp; 👥 {exam.participant_count} Teilnehmer
+                    📅 {examDate.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    &nbsp;·&nbsp; ⏱ {exam.duration_minutes} min.
+                    &nbsp;·&nbsp; ❓ {exam.question_count} questions
+                    &nbsp;·&nbsp; 👥 {exam.participant_count} participants
                   </div>
                 </div>
                 <span style={{ fontSize: 18, color: "var(--muted)" }}>{isExpanded ? "▲" : "▼"}</span>
@@ -176,8 +176,8 @@ function ProfessorDashboard({ onCreateExam }) {
                   {/* Tabs */}
                   <div style={{ display: "flex", gap: 8, marginTop: 16, marginBottom: 16 }}>
                     {[
-                      { key: "list", label: "👥 Teilnehmer" },
-                      { key: "enrollments", label: "📋 Zulassungsliste" },
+                      { key: "list", label: "👥 Participants" },
+                      { key: "enrollments", label: "📋 Enrollment List" },
                     ].map(t => (
                       <button
                         key={t.key}
@@ -193,12 +193,12 @@ function ProfessorDashboard({ onCreateExam }) {
                   {tab === "list" && (
                     <div className="stack">
                       {exam.students.length === 0 ? (
-                        <p className="subtle" style={{ margin: 0 }}>Noch keine Teilnehmer.</p>
+                        <p className="subtle" style={{ margin: 0 }}>No participants yet.</p>
                       ) : (
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                           <thead>
                             <tr style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
-                              {["Name", "E-Mail", "Beigetreten am"].map(h => (
+                              {["Name", "E-Mail", "Joined on"].map(h => (
                                 <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: "var(--muted)", fontWeight: 600 }}>{h}</th>
                               ))}
                             </tr>
@@ -209,7 +209,7 @@ function ProfessorDashboard({ onCreateExam }) {
                                 <td style={{ padding: "8px 10px" }}>{s.name || "—"}</td>
                                 <td style={{ padding: "8px 10px" }}>{s.email}</td>
                                 <td style={{ padding: "8px 10px", color: "var(--muted)" }}>
-                                  {new Date(s.joined_at).toLocaleDateString("de-DE")}
+                                  {new Date(s.joined_at).toLocaleDateString("en-GB")}
                                 </td>
                               </tr>
                             ))}
@@ -223,13 +223,13 @@ function ProfessorDashboard({ onCreateExam }) {
                   {tab === "enrollments" && (
                     <div className="stack">
                       <p className="subtle" style={{ margin: 0, fontSize: 13 }}>
-                        Nur Studierende mit Matrikelnummer in dieser Liste dürfen die Prüfung betreten.
-                        Ist die Liste leer, ist der Beitritt für alle offen.
+                        Only students with a matriculation number in this list may enter the exam.
+                        If the list is empty, joining is open to everyone.
                       </p>
 
                       {/* Add section */}
                       <div className="card" style={{ background: "rgba(255,255,255,.04)", padding: 16 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 10 }}>Matrikelnummern hinzufügen</div>
+                        <div style={{ fontWeight: 600, marginBottom: 10 }}>Add Matriculation Numbers</div>
                         <textarea
                           rows={4}
                           style={{
@@ -237,14 +237,14 @@ function ProfessorDashboard({ onCreateExam }) {
                             border: "1px solid rgba(255,255,255,.15)", borderRadius: 8, padding: 10,
                             color: "#e2e8f0", fontFamily: "inherit", fontSize: 14, resize: "vertical",
                           }}
-                          placeholder={"Eine pro Zeile oder kommagetrennt:\n12345678\n23456789, 34567890"}
+                          placeholder={"One per line or comma-separated:\n12345678\n23456789, 34567890"}
                           value={addInput[exam.id] || ""}
                           onChange={e => setAddInput(p => ({ ...p, [exam.id]: e.target.value }))}
                         />
                         <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
                           <input
                             type="text"
-                            placeholder="Notiz (optional)"
+                            placeholder="Note (optional)"
                             style={{
                               flex: 1, minWidth: 140, background: "rgba(255,255,255,.06)",
                               border: "1px solid rgba(255,255,255,.15)", borderRadius: 8, padding: "8px 12px",
@@ -254,7 +254,7 @@ function ProfessorDashboard({ onCreateExam }) {
                             onChange={e => setAddNote(p => ({ ...p, [exam.id]: e.target.value }))}
                           />
                           <button className="btn" onClick={() => handleAddEnrollments(exam.id)}>
-                            ➕ Hinzufügen
+                            ➕ Add
                           </button>
                         </div>
                         {addMsg[exam.id] && (
@@ -264,15 +264,15 @@ function ProfessorDashboard({ onCreateExam }) {
 
                       {/* Table */}
                       {enrollLoading[exam.id] ? (
-                        <p className="subtle">Lade …</p>
+                        <p className="subtle">Loading …</p>
                       ) : enrollments.length === 0 ? (
-                        <p className="subtle" style={{ margin: 0 }}>Keine Einträge — alle Studierenden dürfen beitreten.</p>
+                        <p className="subtle" style={{ margin: 0 }}>No entries — all students may join.</p>
                       ) : (
                         <div style={{ overflowX: "auto" }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                             <thead>
                               <tr style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
-                                {["Matrikelnummer", "Notiz", "Hinzugefügt", "Aktionen"].map(h => (
+                                {["Matriculation Number", "Note", "Added", "Actions"].map(h => (
                                   <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: "var(--muted)", fontWeight: 600 }}>{h}</th>
                                 ))}
                               </tr>
@@ -305,14 +305,14 @@ function ProfessorDashboard({ onCreateExam }) {
                                       )}
                                     </td>
                                     <td style={{ padding: "8px 10px", color: "var(--muted)", fontSize: 12 }}>
-                                      {new Date(entry.added_at).toLocaleDateString("de-DE")}
+                                      {new Date(entry.added_at).toLocaleDateString("en-GB")}
                                     </td>
                                     <td style={{ padding: "8px 10px" }}>
                                       <div style={{ display: "flex", gap: 8 }}>
                                         {isEditing ? (
                                           <>
-                                            <button className="btn" style={{ padding: "4px 12px", fontSize: 13 }} onClick={handleSaveEdit}>✔ Speichern</button>
-                                            <button className="btn secondary" style={{ padding: "4px 12px", fontSize: 13 }} onClick={() => setEditRow(null)}>Abbrechen</button>
+                                            <button className="btn" style={{ padding: "4px 12px", fontSize: 13 }} onClick={handleSaveEdit}>✔ Save</button>
+                                            <button className="btn secondary" style={{ padding: "4px 12px", fontSize: 13 }} onClick={() => setEditRow(null)}>Cancel</button>
                                           </>
                                         ) : (
                                           <>

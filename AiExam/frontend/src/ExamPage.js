@@ -30,7 +30,7 @@ function ExamPage({ exam, onExit }) {
       } catch (err) {
         if (err.response?.status === 403) {
           setQuestions([]);
-          alert("Bitte trete zuerst der Prüfung bei!");
+          alert("Please join the exam first!");
         } else {
           setQuestions([]);
         }
@@ -105,7 +105,7 @@ function ExamPage({ exam, onExit }) {
   if (questions === null) {
     return (
       <div className="stack-lg">
-        <div className="card"><p style={{ margin: 0 }}>Lade Fragen …</p></div>
+        <div className="card"><p style={{ margin: 0 }}>Loading questions …</p></div>
       </div>
     );
   }
@@ -114,9 +114,9 @@ function ExamPage({ exam, onExit }) {
     return (
       <div className="stack-lg">
         <div className="card muted-box">
-          Für diese Prüfung sind noch keine Fragen verfügbar.
+          No questions are available for this exam yet.
         </div>
-        <button className="btn secondary" onClick={onExit}>Zurück zu den Prüfungen</button>
+        <button className="btn secondary" onClick={onExit}>Back to Exams</button>
       </div>
     );
   }
@@ -127,7 +127,7 @@ function ExamPage({ exam, onExit }) {
       <div className="stack-lg">
         <div className="section-title">
           <span className="emoji">📊</span>
-          <h2 style={{ margin: 0 }}>Ergebnis</h2>
+          <h2 style={{ margin: 0 }}>Results</h2>
         </div>
         
         <div className="card" style={{ textAlign: "center", padding: "32px" }}>
@@ -135,7 +135,7 @@ function ExamPage({ exam, onExit }) {
             {score.percentage >= 70 ? "✅" : score.percentage >= 50 ? "⚠️" : "❌"}
           </div>
           <h3 style={{ margin: "0 0 8px 0", fontSize: "24px" }}>
-            {score.correct} von {score.total} Fragen richtig
+            {score.correct} of {score.total} questions correct
           </h3>
           <div style={{ fontSize: "32px", fontWeight: 700, color: score.percentage >= 70 ? "var(--success)" : score.percentage >= 50 ? "var(--warning)" : "var(--danger)" }}>
             {score.percentage}%
@@ -143,14 +143,14 @@ function ExamPage({ exam, onExit }) {
         </div>
 
         <div className="stack">
-          <h3 style={{ margin: "16px 0 8px 0" }}>Detaillierte Auswertung:</h3>
+          <h3 style={{ margin: "16px 0 8px 0" }}>Detailed Evaluation:</h3>
           {questions.map((q, idx) => {
             const userAnswer = answers[idx];
             const isCorrect = userAnswer === q.answer;
             return (
               <div key={idx} className="card" style={{ borderLeft: `4px solid ${isCorrect ? "var(--success)" : "var(--danger)"}` }}>
                 <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                  Frage {idx + 1}: {q.text || q.question}
+                  Question {idx + 1}: {q.text || q.question}
                 </div>
                 {Array.isArray(q.options) && q.options.length > 0 && (
                   <div style={{ marginTop: 8 }}>
@@ -169,8 +169,8 @@ function ExamPage({ exam, onExit }) {
                           }}
                         >
                           {opt}
-                          {isCorrectAnswer && <span style={{ marginLeft: 8, color: "var(--success)" }}>✓ Richtig</span>}
-                          {isSelected && !isCorrect && <span style={{ marginLeft: 8, color: "var(--danger)" }}>✗ Deine Antwort</span>}
+                          {isCorrectAnswer && <span style={{ marginLeft: 8, color: "var(--success)" }}>✓ Correct</span>}
+                          {isSelected && !isCorrect && <span style={{ marginLeft: 8, color: "var(--danger)" }}>✗ Your answer</span>}
                         </div>
                       );
                     })}
@@ -178,7 +178,7 @@ function ExamPage({ exam, onExit }) {
                 )}
                 {!isCorrect && userAnswer && (
                   <div style={{ marginTop: 8, color: "var(--danger)" }}>
-                    Deine Antwort: {userAnswer}
+                    Your answer: {userAnswer}
                   </div>
                 )}
               </div>
@@ -188,7 +188,7 @@ function ExamPage({ exam, onExit }) {
 
         <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
           <button className="btn secondary" onClick={onExit} style={{ flex: 1 }}>
-            Zurück zu den Prüfungen
+            Back to Exams
           </button>
         </div>
       </div>
@@ -231,13 +231,13 @@ function ExamPage({ exam, onExit }) {
           padding: "12px 16px",
           marginBottom: 16
         }}>
-          <div style={{ fontSize: "12px", marginBottom: 4, opacity: 0.8 }}>Verbleibende Zeit</div>
+          <div style={{ fontSize: "12px", marginBottom: 4, opacity: 0.8 }}>Time Remaining</div>
           <div style={{ fontSize: "32px", fontWeight: 700, color: getTimeColor(), fontFamily: "monospace" }}>
             {formatTime(timeRemaining)}
           </div>
           {timeRemaining <= 60 && (
             <div style={{ fontSize: "12px", marginTop: 4, color: "var(--danger)" }}>
-              ⚠️ Weniger als eine Minute verbleibend!
+              ⚠️ Less than one minute remaining!
             </div>
           )}
         </div>
@@ -245,10 +245,10 @@ function ExamPage({ exam, onExit }) {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div className="subtle">
-          Frage {currentQuestionIndex + 1} von {questions.length}
+          Question {currentQuestionIndex + 1} of {questions.length}
         </div>
         <div className="subtle">
-          {Object.values(answers).filter(a => a !== null).length} von {questions.length} beantwortet
+          {Object.values(answers).filter(a => a !== null).length} of {questions.length} answered
         </div>
       </div>
 
@@ -290,7 +290,7 @@ function ExamPage({ exam, onExit }) {
             })}
           </div>
         ) : (
-          <div className="subtle">Keine Optionen verfügbar</div>
+          <div className="subtle">No options available</div>
         )}
       </div>
 
@@ -301,7 +301,7 @@ function ExamPage({ exam, onExit }) {
           disabled={isFirstQuestion}
           style={{ opacity: isFirstQuestion ? 0.5 : 1, cursor: isFirstQuestion ? "not-allowed" : "pointer" }}
         >
-          ← Zurück
+          ← Back
         </button>
         
         {isLastQuestion ? (
@@ -311,7 +311,7 @@ function ExamPage({ exam, onExit }) {
             disabled={!hasAnswer}
             style={{ opacity: !hasAnswer ? 0.5 : 1, cursor: !hasAnswer ? "not-allowed" : "pointer" }}
           >
-            Prüfung abschließen
+            Finish Exam
           </button>
         ) : (
           <button
@@ -319,7 +319,7 @@ function ExamPage({ exam, onExit }) {
             onClick={handleNext}
             style={{ marginLeft: "auto" }}
           >
-            Nächste →
+            Next →
           </button>
         )}
       </div>
@@ -347,7 +347,7 @@ function ExamPage({ exam, onExit }) {
       </div>
 
       <button className="btn secondary" onClick={onExit} style={{ marginTop: 16 }}>
-        Prüfung abbrechen
+        Cancel Exam
       </button>
     </div>
   );

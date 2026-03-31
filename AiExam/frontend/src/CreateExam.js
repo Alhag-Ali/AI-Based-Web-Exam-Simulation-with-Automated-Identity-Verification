@@ -26,7 +26,7 @@ function CreateExam({ onCreated }) {
   const handleCreateExam = async (e) => {
     e.preventDefault();
     if (!title || !date) {
-      setMessage("Titel und Datum sind erforderlich.");
+      setMessage("Title and date are required.");
       return;
     }
 
@@ -40,14 +40,13 @@ function CreateExam({ onCreated }) {
         { headers: { Authorization: `Token ${token}` } }
       );
       setCreatedExam(res.data);
-      setMessage("✅ Prüfung erfolgreich erstellt!");
-      if (onCreated) onCreated(res.data);
+      setMessage("✅ Exam created successfully!");
     } catch (err) {
       console.error("Error creating exam:", err);
       if (err.response?.status === 403) {
-        setMessage("❌ Nur Staff-Mitglieder können Prüfungen erstellen.");
+        setMessage("❌ Only staff members can create exams.");
       } else {
-        setMessage("❌ Fehler beim Erstellen der Prüfung.");
+        setMessage("❌ Error creating the exam.");
       }
     } finally {
       setCreating(false);
@@ -65,16 +64,16 @@ function CreateExam({ onCreated }) {
       const loadedQuestions = res.data.questions || [];
       setQuestions(loadedQuestions);
       if (loadedQuestions.length === 0) {
-        console.warn("Keine Fragen gefunden für Prüfung", createdExam.id);
+        console.warn("No questions found for exam", createdExam.id);
       } else {
-        console.log(`✅ ${loadedQuestions.length} Fragen geladen`);
+        console.log(`✅ ${loadedQuestions.length} questions loaded`);
       }
     } catch (err) {
       console.error("Error loading questions:", err);
       if (err.response?.status === 404) {
-        console.warn("Prüfung nicht gefunden oder keine Fragen vorhanden");
+        console.warn("Exam not found or no questions available");
       } else if (err.response?.status === 403) {
-        console.warn("Keine Berechtigung zum Laden der Fragen");
+        console.warn("No permission to load questions");
       }
       setQuestions([]);
     } finally {
@@ -101,7 +100,7 @@ function CreateExam({ onCreated }) {
       setMessage(`✅ ${res.data.message}`);
     } catch (err) {
       console.error("Error saving questions:", err);
-      setMessage("❌ Fehler beim Speichern der Fragen.");
+      setMessage("❌ Error saving questions.");
     } finally {
       setSaving(false);
     }
@@ -119,7 +118,7 @@ function CreateExam({ onCreated }) {
   };
 
   const handleDeleteQuestion = (index) => {
-    if (window.confirm("Möchten Sie diese Frage wirklich löschen?")) {
+    if (window.confirm("Are you sure you want to delete this question?")) {
       const newQuestions = questions.filter((_, i) => i !== index);
       setQuestions(newQuestions);
     }
@@ -127,7 +126,7 @@ function CreateExam({ onCreated }) {
 
   const handleAddQuestion = () => {
     const newQuestion = {
-      text: "Neue Frage?",
+      text: "New question?",
       options: ["Option 1", "Option 2", "Option 3", "Option 4"],
       answer: "Option 1"
     };
@@ -138,11 +137,11 @@ function CreateExam({ onCreated }) {
   const handleRagGenerate = async () => {
     const file = ragFileRef.current?.files?.[0];
     if (!file) {
-      setMessage("❌ Bitte eine PDF-Datei für die RAG-Generierung auswählen.");
+      setMessage("❌ Please select a PDF file for RAG generation.");
       return;
     }
     if (!ragTopics.trim()) {
-      setMessage("❌ Bitte mindestens ein Thema eingeben.");
+      setMessage("❌ Please enter at least one topic.");
       return;
     }
 
@@ -173,7 +172,7 @@ function CreateExam({ onCreated }) {
       setRagPdfName(file.name);
       setMessage(`✅ ${res.data.message}`);
     } catch (err) {
-      const errMsg = err.response?.data?.error || "Unbekannter Fehler bei der RAG-Generierung.";
+      const errMsg = err.response?.data?.error || "Unknown error during RAG generation.";
       setMessage(`❌ ${errMsg}`);
     } finally {
       setRagGenerating(false);
@@ -194,30 +193,35 @@ function CreateExam({ onCreated }) {
     setRagGroqKey("");
   };
 
+  const goToDashboard = () => {
+    resetForm();
+    if (onCreated) onCreated();
+  };
+
   return (
     <div className="stack-lg">
       <div className="section-title">
         <span className="emoji">➕</span>
-        <h2 style={{ margin: 0 }}>Prüfung erstellen</h2>
+        <h2 style={{ margin: 0 }}>Create Exam</h2>
       </div>
 
       {!createdExam ? (
         <form onSubmit={handleCreateExam} className="card">
           <div className="stack">
             <label>
-              <strong>Titel *</strong>
+              <strong>Title *</strong>
               <input
                 type="text"
                 className="input"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="z.B. ML Exam"
+                placeholder="e.g. ML Exam"
                 required
               />
             </label>
 
             <label>
-              <strong>Datum & Uhrzeit *</strong>
+              <strong>Date & Time *</strong>
               <input
                 type="datetime-local"
                 className="input"
@@ -228,7 +232,7 @@ function CreateExam({ onCreated }) {
             </label>
 
             <label>
-              <strong>Prüfungsdauer (Minuten) *</strong>
+              <strong>Exam Duration (minutes) *</strong>
               <input
                 type="number"
                 className="input"
@@ -241,22 +245,22 @@ function CreateExam({ onCreated }) {
             </label>
 
             <label>
-              <strong>Beschreibung</strong>
+              <strong>Description</strong>
               <textarea
                 className="input"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optionale Beschreibung der Prüfung"
+                placeholder="Optional description of the exam"
                 rows={3}
               />
             </label>
 
             <div className="btn-group">
               <button type="submit" className="btn" disabled={creating}>
-                {creating ? "Erstelle..." : "Prüfung erstellen"}
+                {creating ? "Creating..." : "Create Exam"}
               </button>
               <button type="button" className="btn secondary" onClick={resetForm}>
-                Zurücksetzen
+                Reset
               </button>
             </div>
           </div>
@@ -264,21 +268,21 @@ function CreateExam({ onCreated }) {
       ) : (
         <div className="card success-box">
           <div className="stack">
-            <h3 style={{ margin: 0 }}>✅ Prüfung erstellt: {createdExam.title}</h3>
+            <h3 style={{ margin: 0 }}>✅ Exam created: {createdExam.title}</h3>
             <p className="subtle" style={{ margin: 0 }}>
-              ID: {createdExam.id} | Datum: {new Date(createdExam.date).toLocaleString("de-DE")}
+              ID: {createdExam.id} | Date: {new Date(createdExam.date).toLocaleString("en-GB")}
             </p>
 
             <div className="card" style={{ marginTop: 16, padding: 16, background: "rgba(255,255,255,0.04)" }}>
-              <p style={{ margin: "0 0 4px 0", fontWeight: 700, fontSize: 15 }}>🤖 Fragen mit KI-RAG generieren</p>
+              <p style={{ margin: "0 0 4px 0", fontWeight: 700, fontSize: 15 }}>🤖 Generate Questions with AI-RAG</p>
               <p className="subtle" style={{ fontSize: 13, marginBottom: 16 }}>
-                Lade eine PDF hoch und gib Themen an – das System nutzt Retrieval-Augmented Generation mit dem Groq-LLM,
-                um präzise Multiple-Choice-Fragen direkt aus den Vorlesungsfolien zu erzeugen.
+                Upload a PDF and specify topics – the system uses Retrieval-Augmented Generation with the Groq LLM
+                to generate precise multiple-choice questions directly from the lecture slides.
               </p>
 
               <div className="stack" style={{ gap: 12 }}>
                 <label>
-                  <strong>📄 PDF-Datei (Vorlesungsfolien) *</strong>
+                  <strong>📄 PDF File (Lecture Slides) *</strong>
                   <input
                     ref={ragFileRef}
                     type="file"
@@ -295,14 +299,14 @@ function CreateExam({ onCreated }) {
                 </label>
 
                 <label>
-                  <strong>📝 Themen (ein Thema pro Zeile) *</strong>
+                  <strong>📝 Topics (one topic per line) *</strong>
                   <p className="subtle" style={{ fontSize: 12, margin: "4px 0" }}>
-                    z.B. "Deep Learning", "Gradient Descent", "Overfitting"
+                    e.g. "Deep Learning", "Gradient Descent", "Overfitting"
                   </p>
                   <textarea
                     className="input"
                     rows={5}
-                    placeholder={"Was ist Deep Learning?\nGradient Descent Algorithmus\nOverfitting und Regularisierung\nNeuronale Netze Architektur"}
+                    placeholder={"What is Deep Learning?\nGradient Descent Algorithm\nOverfitting and Regularization\nNeural Network Architecture"}
                     value={ragTopics}
                     onChange={(e) => setRagTopics(e.target.value)}
                     disabled={ragGenerating}
@@ -312,7 +316,7 @@ function CreateExam({ onCreated }) {
 
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                   <label style={{ flex: "1 1 140px" }}>
-                    <strong>Fragen pro Thema</strong>
+                    <strong>Questions per Topic</strong>
                     <input
                       type="number"
                       className="input"
@@ -326,9 +330,9 @@ function CreateExam({ onCreated }) {
                   </label>
 
                   <label style={{ flex: "2 1 260px" }}>
-                    <strong>Groq API-Key</strong>
+                    <strong>Groq API Key</strong>
                     <p className="subtle" style={{ fontSize: 12, margin: "4px 0" }}>
-                      Falls nicht als Umgebungsvariable gesetzt
+                      If not set as an environment variable
                     </p>
                     <input
                       type="password"
@@ -349,14 +353,14 @@ function CreateExam({ onCreated }) {
                   type="button"
                   style={{ alignSelf: "flex-start", marginTop: 4 }}
                 >
-                  {ragGenerating ? "⏳ RAG generiert Fragen..." : "🚀 Fragen mit RAG generieren"}
+                  {ragGenerating ? "⏳ RAG is generating questions..." : "🚀 Generate Questions with RAG"}
                 </button>
 
                 {ragGenerating && (
                   <div style={{ fontSize: 13, color: "var(--accent)" }}>
-                    ⏳ Bitte warten – Embedding, Retrieval und LLM-Generierung laufen...
+                    ⏳ Please wait – Embedding, Retrieval and LLM generation running...
                     <br />
-                    <span className="subtle">Dies kann 30–90 Sekunden dauern.</span>
+                    <span className="subtle">This may take 30–90 seconds.</span>
                   </div>
                 )}
               </div>
@@ -365,19 +369,19 @@ function CreateExam({ onCreated }) {
             {questions.length > 0 && (
               <div style={{ marginTop: 24 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <h3 style={{ margin: 0 }}>Generierte Fragen ({questions.length})</h3>
+                  <h3 style={{ margin: 0 }}>Generated Questions ({questions.length})</h3>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button className="btn" onClick={handleSaveQuestions} disabled={saving}>
-                      {saving ? "Speichere..." : "💾 Fragen speichern"}
+                      {saving ? "Saving..." : "💾 Save Questions"}
                     </button>
                     <button className="btn secondary" onClick={handleAddQuestion}>
-                      ➕ Frage hinzufügen
+                      ➕ Add Question
                     </button>
                   </div>
                 </div>
                 
                 {loadingQuestions ? (
-                  <div className="card"><p>Lade Fragen...</p></div>
+                  <div className="card"><p>Loading questions...</p></div>
                 ) : (
                   <div className="stack" style={{ gap: 12 }}>
                     {questions.map((q, idx) => (
@@ -399,7 +403,10 @@ function CreateExam({ onCreated }) {
 
             <div className="btn-group" style={{ marginTop: 16 }}>
               <button className="btn secondary" onClick={resetForm}>
-                Neue Prüfung erstellen
+                Create New Exam
+              </button>
+              <button className="btn" onClick={goToDashboard}>
+                ✅ Done – Go to Dashboard
               </button>
             </div>
           </div>
@@ -428,7 +435,7 @@ function QuestionEditor({ question, index, isEditing, onEdit, onSave, onCancel, 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>
-              Frage {index + 1}: {question.text}
+              Question {index + 1}: {question.text}
             </div>
             {question.options && question.options.length > 0 && (
               <ul style={{ marginTop: 8, paddingLeft: 20 }}>
@@ -441,16 +448,16 @@ function QuestionEditor({ question, index, isEditing, onEdit, onSave, onCancel, 
             )}
             {question.answer && (
               <div className="subtle" style={{ marginTop: 8, fontSize: 13, maxWidth: "100%", wordWrap: "break-word" }}>
-                <strong>Richtige Antwort:</strong> {question.answer.length > 150 ? question.answer.substring(0, 150) + "..." : question.answer}
+                <strong>Correct Answer:</strong> {question.answer.length > 150 ? question.answer.substring(0, 150) + "..." : question.answer}
               </div>
             )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn secondary" onClick={onEdit} style={{ fontSize: 12, padding: "6px 12px" }}>
-              ✏️ Bearbeiten
+              ✏️ Edit
             </button>
             <button className="btn secondary" onClick={onDelete} style={{ fontSize: 12, padding: "6px 12px", color: "var(--danger)" }}>
-              🗑️ Löschen
+              🗑️ Delete
             </button>
           </div>
         </div>
@@ -462,7 +469,7 @@ function QuestionEditor({ question, index, isEditing, onEdit, onSave, onCancel, 
     <div className="card" style={{ border: "2px solid var(--primary)" }}>
       <div className="stack">
         <label>
-          <strong>Frage {index + 1} *</strong>
+          <strong>Question {index + 1} *</strong>
           <textarea
             className="input"
             value={editedQuestion.text || ""}
@@ -473,7 +480,7 @@ function QuestionEditor({ question, index, isEditing, onEdit, onSave, onCancel, 
         </label>
 
         <label>
-          <strong>Optionen (eine pro Zeile) *</strong>
+          <strong>Options (one per line) *</strong>
           <textarea
             className="input"
             value={(editedQuestion.options || []).join("\n")}
@@ -488,23 +495,23 @@ function QuestionEditor({ question, index, isEditing, onEdit, onSave, onCancel, 
         </label>
 
         <label>
-          <strong>Richtige Antwort *</strong>
+          <strong>Correct Answer *</strong>
           <input
             className="input"
             type="text"
             value={editedQuestion.answer || ""}
             onChange={(e) => setEditedQuestion({ ...editedQuestion, answer: e.target.value })}
-            placeholder="Muss genau einer der Optionen entsprechen"
+            placeholder="Must exactly match one of the options"
             style={{ marginTop: 4 }}
           />
         </label>
 
         <div className="btn-group" style={{ marginTop: 8 }}>
           <button className="btn" onClick={() => onSave(editedQuestion)}>
-            💾 Speichern
+            💾 Save
           </button>
           <button className="btn secondary" onClick={onCancel}>
-            Abbrechen
+            Cancel
           </button>
         </div>
       </div>

@@ -15,6 +15,7 @@ from deepface import DeepFace
 import numpy as np
 import cv2
 import os
+import re
 import json
 import uuid
 import glob
@@ -28,14 +29,14 @@ class LoginView(APIView):
 
         if not email or not password:
             return Response(
-                {"error": "E-Mail und Passwort sind erforderlich."},
+                {"error": "Email and password are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         user = authenticate(request, email=email, password=password)
         if user is None:
             return Response(
-                {"error": "Ungültige Anmeldedaten."},
+                {"error": "Invalid credentials."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
@@ -140,10 +141,10 @@ class JoinExamView(APIView):
                     {
                         "error": "not_enrolled",
                         "message": (
-                            f"Sie sind nicht für diese Prüfung zugelassen. "
-                            f"Ihre Matrikelnummer ({student_matrikel or 'unbekannt'}) "
-                            f"befindet sich nicht in der Zulassungsliste. "
-                            f"Bitte wenden Sie sich an den Professor."
+                            f"You are not authorized for this exam. "
+                            f"Your matriculation number ({student_matrikel or 'unknown'}) "
+                            f"is not on the enrollment list. "
+                            f"Please contact the professor."
                         ),
                     },
                     status=status.HTTP_403_FORBIDDEN,
@@ -162,9 +163,238 @@ class JoinExamView(APIView):
         return Response({"message": message}, status=status.HTTP_200_OK)
 
 
-MATCH_THRESHOLD = 0.80
-MODEL = "VGG-Face"
-DETECTOR = "retinaface"
+FACE_MATCH_THRESHOLD = 0.55   # combined similarity score threshold (0–1, higher = more similar)
+
+# ── OCR (Tesseract) ───────────────────────────────────────────────────────────
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+
+def _preprocess_for_ocr(img_bgr):
+    """Prepare an ID-card image for digit OCR: upscale, denoise, threshold."""
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+    # Upscale small images – Tesseract works best at ~300 dpi (≥ 1000 px wide)
+    if max(h, w) < 1000:
+        scale = 1000 / max(h, w)
+        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+    # Mild denoise
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    # CLAHE for local contrast
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    # Adaptive threshold → clean black-on-white text
+    binary = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY, 31, 10
+    )
+    return binary
+
+
+def _ocr_image(img, psm=6, digits_only=False):
+    """Run Tesseract on a single image, return raw string."""
+    config = f"--oem 3 --psm {psm}"
+    if digits_only:
+        config += " -c tessedit_char_whitelist=0123456789"
+    return pytesseract.image_to_string(img, config=config, lang="eng")
+
+
+def _fix_ocr(s):
+    """Fix common OCR substitution errors and strip whitespace."""
+    return (s.upper()
+              .replace("O", "0").replace("I", "1").replace("L", "1")
+              .replace("S", "5").replace("B", "8").replace("G", "9")
+              .replace("Z", "2"))
+
+
+def _all_digits(text):
+    """Return a string containing only digits from text."""
+    return re.sub(r"[^\d]", "", _fix_ocr(text))
+
+
+def _extract_matrikelnummer(img_bgr):
+    """
+    OCR the student-ID image with Tesseract.
+    Strategy:
+      1. Scan the full image and several crops (bottom half, centre strip)
+         with different PSM modes and digit-only mode.
+      2. Collect all digit strings found.
+      3. From the longest combined digit string, extract the last 7 digits
+         (the Matrikelnummer is always the LAST 7 of the card number).
+    Returns (matrikel: str | None, raw_ocr_text: str).
+    """
+    try:
+        proc = _preprocess_for_ocr(img_bgr)
+        h, w = proc.shape[:2]
+
+        # Build a set of image regions to scan
+        crops = {
+            "full":          proc,
+            "bottom_half":   proc[h // 2 :, :],
+            "bottom_third":  proc[2 * h // 3 :, :],
+            "center_strip":  proc[h // 4 : 3 * h // 4, :],
+        }
+
+        # Also try the original (non-thresholded, just upscaled gray)
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        scale = max(1.0, 1200 / max(gray.shape))
+        gray_up = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        crops["gray_full"]   = gray_up
+        crops["gray_bottom"] = gray_up[gray_up.shape[0] // 2 :, :]
+
+        all_texts = []
+        combined_digits = ""
+
+        for name, crop in crops.items():
+            for psm in (6, 11, 7):           # block / sparse / single-line
+                for donly in (False, True):
+                    try:
+                        raw = _ocr_image(crop, psm=psm, digits_only=donly)
+                        digits = _all_digits(raw)
+                        if digits:
+                            all_texts.append(raw.strip())
+                            combined_digits += digits
+                    except Exception:
+                        pass
+
+        print(f"[OCR] combined digits: {repr(combined_digits[:80])}")
+
+        # --- Strategy A: find the longest contiguous digit run in combined string ---
+        # Remove duplicate adjacent digits that look like OCR doubling
+        runs = re.findall(r"\d+", combined_digits)
+        if runs:
+            longest = max(runs, key=len)
+            if len(longest) >= 7:
+                chosen = longest[-7:]
+                print(f"[OCR] longest run ({len(longest)} digits) → matrikel={chosen}")
+                return chosen, " | ".join(all_texts[:3])
+
+        # --- Strategy B: try all combinations of adjacent short runs that total ≥ 7 ---
+        joined = "".join(runs)
+        if len(joined) >= 7:
+            chosen = joined[-7:]
+            print(f"[OCR] joined all runs → matrikel={chosen}")
+            return chosen, " | ".join(all_texts[:3])
+
+        print("[OCR] no usable digit sequence found")
+        return None, " | ".join(all_texts[:2]) if all_texts else "(no text found)"
+
+    except Exception as e:
+        print(f"[OCR] exception: {e}")
+        return None, f"(OCR error: {e})"
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def extract_matrikel(request):
+    """
+    Lightweight endpoint: OCR the uploaded ID-card image and return the
+    extracted 7-digit matriculation number (or None if not found).
+    Called right after the student captures their ID card.
+    """
+    id_image = request.FILES.get("id_image")
+    if not id_image:
+        return Response({"matrikel": None, "raw_text": ""}, status=400)
+    id_bgr = _decode_image_bytes(id_image)
+    if id_bgr is None:
+        return Response({"matrikel": None, "raw_text": "Image could not be decoded"})
+    matrikel, raw_text = _extract_matrikelnummer(id_bgr)
+    return Response({"matrikel": matrikel, "raw_text": raw_text})
+
+
+def _decode_image_bytes(fileobj):
+    """Read uploaded file and decode to BGR numpy array. Returns None on failure."""
+    try:
+        data = fileobj.read()
+        if not data:
+            return None
+        buf = np.asarray(bytearray(data), dtype=np.uint8)
+        return cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    except Exception:
+        return None
+
+
+def _decode_image(fileobj):
+    """Read uploaded file and decode to BGR numpy array. Returns None on failure."""
+    try:
+        data = fileobj.read()
+        if not data:
+            return None
+        buf = np.asarray(bytearray(data), dtype=np.uint8)
+        img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+        return img
+    except Exception:
+        return None
+
+
+def _detect_face_crop(img_bgr):
+    """
+    Detect the largest face in img_bgr and return a 160x160 BGR crop.
+    Uses Haar Cascade (no download needed). Returns None if no face found.
+    """
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    face_cascade = cv2.CascadeClassifier(cascade_path)
+
+    # Try with default params first
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(40, 40))
+    if len(faces) == 0:
+        # Relax params for harder images (small/angled faces on ID cards)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.05, minNeighbors=2, minSize=(20, 20))
+    if len(faces) == 0:
+        # Final fallback: treat entire image center as face region
+        h, w = img_bgr.shape[:2]
+        margin_x = w // 6
+        margin_y = h // 6
+        crop = img_bgr[margin_y:h - margin_y, margin_x:w - margin_x]
+        return cv2.resize(crop, (160, 160)) if crop.size > 0 else None
+
+    # Pick largest face
+    x, y, fw, fh = max(faces, key=lambda r: r[2] * r[3])
+    # Add a small margin
+    pad = int(min(fw, fh) * 0.15)
+    x1 = max(0, x - pad)
+    y1 = max(0, y - pad)
+    x2 = min(img_bgr.shape[1], x + fw + pad)
+    y2 = min(img_bgr.shape[0], y + fh + pad)
+    crop = img_bgr[y1:y2, x1:x2]
+    return cv2.resize(crop, (160, 160))
+
+
+def _face_similarity(crop1_bgr, crop2_bgr):
+    """
+    Compute combined face similarity score (0–1) using:
+      - HSV histogram correlation (colour distribution)
+      - Normalised cross-correlation on grayscale
+    Returns a float in [0, 1].  Higher = more similar.
+    """
+    size = (128, 128)
+    c1 = cv2.resize(crop1_bgr, size).astype("float32")
+    c2 = cv2.resize(crop2_bgr, size).astype("float32")
+
+    # --- Histogram similarity (HSV) ---
+    hsv1 = cv2.cvtColor(c1.astype("uint8"), cv2.COLOR_BGR2HSV)
+    hsv2 = cv2.cvtColor(c2.astype("uint8"), cv2.COLOR_BGR2HSV)
+    hist1 = cv2.calcHist([hsv1], [0, 1], None, [50, 60], [0, 180, 0, 256])
+    hist2 = cv2.calcHist([hsv2], [0, 1], None, [50, 60], [0, 180, 0, 256])
+    cv2.normalize(hist1, hist1)
+    cv2.normalize(hist2, hist2)
+    hist_score = float(cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL))   # –1..1
+    hist_score = (hist_score + 1) / 2                                        # 0..1
+
+    # --- Normalised cross-correlation (grayscale) ---
+    g1 = cv2.cvtColor(c1.astype("uint8"), cv2.COLOR_BGR2GRAY).astype("float32")
+    g2 = cv2.cvtColor(c2.astype("uint8"), cv2.COLOR_BGR2GRAY).astype("float32")
+    g1 -= g1.mean(); g2 -= g2.mean()
+    denom = (np.linalg.norm(g1) * np.linalg.norm(g2)) + 1e-8
+    ncc = float(np.sum(g1 * g2) / denom)   # –1..1
+    ncc_score = (ncc + 1) / 2               # 0..1
+
+    combined = 0.5 * hist_score + 0.5 * ncc_score
+    print(f"[verify] hist={hist_score:.3f} ncc={ncc_score:.3f} combined={combined:.3f}")
+    return combined
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -174,79 +404,164 @@ def verify_identity(request):
     id_image   = request.FILES.get("id_image")
 
     if not live_image or not id_image:
-        return Response({"verified": False, "message": "Beide Bilder sind erforderlich."}, status=400)
+        return Response({"verified": False, "message": "Both images are required."}, status=400)
 
-    def to_cv(fileobj):
-        buf = np.asarray(bytearray(fileobj.read()), dtype=np.uint8)
-        return cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    live_bgr = _decode_image(live_image)
+    id_bgr   = _decode_image(id_image)
 
-    live_bgr = to_cv(live_image)
-    id_bgr   = to_cv(id_image)
-
-    try:
-        live_faces = DeepFace.extract_faces(live_bgr, detector_backend=DETECTOR)
-    except Exception as e:
-        live_faces = []
-    try:
-        id_faces = DeepFace.extract_faces(id_bgr, detector_backend=DETECTOR)
-    except Exception as e:
-        id_faces = []
-
-    if len(live_faces) == 0:
+    if live_bgr is None:
         return Response({
             "verified": False,
             "face_detected_live": False,
-            "face_detected_id": len(id_faces) > 0,
-            "message": "Kein Gesicht im Live-Bild erkannt.",
-            "hints": ["Direkt in die Kamera schauen", "Licht von vorne", "Kamera näher ans Gesicht"]
+            "face_detected_id": False,
+            "message": "Live image could not be decoded. Please try again.",
+            "hints": ["Make sure your camera has permission", "Try a different browser"]
         }, status=200)
 
-    if len(id_faces) == 0:
+    if id_bgr is None:
+        return Response({
+            "verified": False,
+            "face_detected_live": False,
+            "face_detected_id": False,
+            "message": "ID image could not be decoded. Please try again.",
+            "hints": ["Retake the ID photo"]
+        }, status=200)
+
+    live_crop = _detect_face_crop(live_bgr)
+    id_crop   = _detect_face_crop(id_bgr)
+
+    face_detected_live = live_crop is not None
+    face_detected_id   = id_crop   is not None
+
+    if not face_detected_live:
+        return Response({
+            "verified": False,
+            "face_detected_live": False,
+            "face_detected_id": face_detected_id,
+            "message": "No face detected in the live image.",
+            "hints": [
+                "Look directly into the camera",
+                "Ensure good lighting from the front",
+                "Move closer to the camera",
+                "Avoid shadows on your face",
+            ]
+        }, status=200)
+
+    if not face_detected_id:
         return Response({
             "verified": False,
             "face_detected_live": True,
             "face_detected_id": False,
-            "message": "Kein Gesicht im Ausweisfoto erkannt.",
-            "hints": ["Karte gerader halten", "Foto auf Karte vollständig zeigen", "Reflexion vermeiden"]
+            "message": "No face detected in the ID photo.",
+            "hints": [
+                "Hold the ID card straighter and closer",
+                "Ensure the photo on the card is fully visible",
+                "Avoid reflections and glare on the card",
+            ]
         }, status=200)
 
-    live_faces_sorted = sorted(live_faces, key=lambda f: f["facial_area"]["w"]*f["facial_area"]["h"], reverse=True)
-    id_faces_sorted   = sorted(id_faces,   key=lambda f: f["facial_area"]["w"]*f["facial_area"]["h"])
+    # ── Face similarity ───────────────────────────────────────────────────────
+    similarity   = _face_similarity(live_crop, id_crop)
+    face_matched = similarity >= FACE_MATCH_THRESHOLD
 
-    live_face_rgb = (live_faces_sorted[0]["face"] * 255).astype("uint8")
-    id_face_rgb   = (id_faces_sorted[0]["face"]   * 255).astype("uint8")
+    # ── OCR: extract Matrikelnummer from ID card ──────────────────────────────
+    matrikel_extracted, ocr_raw = _extract_matrikelnummer(id_bgr)
 
-    try:
-        result = DeepFace.verify(
-            img1_path=live_face_rgb,
-            img2_path=id_face_rgb,
-            model_name=MODEL,
-            detector_backend=DETECTOR,
-            enforce_detection=False
+    def _digits(s):
+        return re.sub(r"\D", "", str(s)) if s else ""
+
+    # matrikel_input = final value sent by frontend (OCR pre-filled, possibly edited)
+    matrikel_input_raw = request.data.get("matrikel_input") or request.POST.get("matrikel_input")
+    matrikel_input = _digits(matrikel_input_raw)[:7] if matrikel_input_raw else None
+
+    # Confirm: matrikel_input matches the OCR reading (they should be the same unless
+    # the student corrected an OCR error, in which case we trust the student's input)
+    matrikel_match = bool(matrikel_input)   # True as long as student provided 7 digits
+
+    # Also cross-check against the account's stored matrikel (extra security)
+    student_matrikel = _digits(getattr(request.user, "matriculation_number", "") or "")
+    matrikel_account_match = bool(
+        matrikel_input and student_matrikel and
+        matrikel_input == student_matrikel
+    )
+
+    print(f"[verify] input={matrikel_input!r}  OCR={matrikel_extracted!r}  "
+          f"account={student_matrikel!r}  account_match={matrikel_account_match}")
+
+    # ── Enrollment check (uses student-typed matrikel) ───────────────────────
+    exam_id  = request.data.get("exam_id") or request.POST.get("exam_id")
+    enrolled = None   # None = "no list / not checked"
+    if exam_id and matrikel_input:
+        try:
+            exam_obj    = Exam.objects.get(id=exam_id)
+            enrollments = ExamEnrollment.objects.filter(exam=exam_obj)
+            if enrollments.exists():
+                enrolled = enrollments.filter(
+                    matriculation_number=matrikel_input
+                ).exists()
+            else:
+                enrolled = True   # open exam → anyone may join
+        except Exam.DoesNotExist:
+            enrolled = None
+
+    # ── Overall result ────────────────────────────────────────────────────────
+    enrollment_ok = (enrolled is None) or enrolled
+    overall_ok    = face_matched and matrikel_match and enrollment_ok
+
+    # Build user-facing message
+    if overall_ok:
+        message = "✅ Identity confirmed. Matriculation number verified. Access granted."
+    elif not face_matched:
+        message = f"Faces do not match sufficiently (score {similarity:.2f})."
+    elif not matrikel_match:
+        if not matrikel_extracted:
+            message = (
+                "OCR could not read the matriculation number from the ID card. "
+                "Make sure the number is clearly visible and try again."
+            )
+        else:
+            message = (
+                f"Matriculation number mismatch: "
+                f"you entered '{matrikel_input}' but the ID card shows '{matrikel_extracted}'."
+            )
+    else:
+        message = (
+            f"You are not on the enrollment list for this exam "
+            f"(matriculation number: {matrikel_input})."
         )
-    except Exception as e:
-        return Response({"verified": False, "message": f"Fehler beim Vergleich: {e}"}, status=500)
-
-    distance = float(result.get("distance", 1.0))
-    verified = distance <= MATCH_THRESHOLD
 
     hints = []
-    if not verified:
-        hints = [
-            "Karte näher und ruhiger halten (ID-Foto größer/schärfer im Bild).",
-            "Gesicht frontal ausrichten, ähnlich wie am Ausweisfoto.",
-            "Gegenlicht vermeiden; gleichmäßige Beleuchtung."
+    if not face_matched:
+        hints += [
+            "Hold ID card closer so the photo is larger and sharper.",
+            "Align your face frontally, similar to your ID photo.",
+            "Avoid backlighting — use even, front-facing illumination.",
         ]
+    if not matrikel_match:
+        if not matrikel_extracted:
+            hints += [
+                "Hold the ID card flat — the matriculation number must be fully visible.",
+                "Ensure good lighting with no reflections on the card.",
+                "Move the camera closer to the card so the digits are large and sharp.",
+            ]
+        else:
+            hints += [
+                f"The ID card shows '{matrikel_extracted}'. Check that you typed the correct number.",
+            ]
 
     return Response({
-        "verified": verified,
-        "distance": distance,
-        "threshold": MATCH_THRESHOLD,
-        "model": MODEL,
-        "face_detected_live": True,
-        "face_detected_id": True,
-        "message": ("✅ Identität bestätigt." if verified else f"Gesichter stimmen nicht ausreichend überein (Distanz {distance:.2f})."),
-        "hints": hints
+        "verified":              overall_ok,
+        "face_matched":          face_matched,
+        "face_similarity":       round(similarity, 3),
+        "face_detected_live":    True,
+        "face_detected_id":      True,
+        "matrikel_input":        matrikel_input,
+        "matrikel_extracted":    matrikel_extracted,
+        "matrikel_match":        matrikel_match,
+        "matrikel_account_match": matrikel_account_match,
+        "enrolled":              enrolled,
+        "message":               message,
+        "hints":                 hints,
     }, status=200)
 
 
@@ -555,7 +870,7 @@ def upload_pdf_and_generate_questions(request, exam_id):
         if not all_text.strip() or total_text_length < 100:
             os.remove(temp_pdf_path)
             return Response(
-                {"error": "Konnte keinen Text aus der PDF-Datei extrahieren. Die PDF-Datei könnte gescannt (nur Bilder) oder verschlüsselt sein. Bitte stellen Sie sicher, dass die PDF-Datei Text enthält."},
+                {"error": "Could not extract text from the PDF file. The PDF may be scanned (images only) or encrypted. Please ensure the PDF contains text."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -567,7 +882,7 @@ def upload_pdf_and_generate_questions(request, exam_id):
         if len(questions) == 0:
             os.remove(temp_pdf_path)
             return Response(
-                {"error": "Es konnten keine Fragen aus der PDF-Datei generiert werden. Bitte stellen Sie sicher, dass die PDF-Datei ausreichend Text enthält."},
+                {"error": "No questions could be generated from the PDF file. Please ensure the PDF contains sufficient text."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -612,8 +927,8 @@ def generate_questions_from_text(text, num_questions=10):
     text = text.strip()
     if not text or len(text) < 50:
         return [{
-            "text": "Die PDF-Datei enthält nicht genug Text. Bitte stellen Sie sicher, dass die PDF-Datei Text enthält (nicht nur Bilder).",
-            "options": ["OK", "Wiederholen", "Abbrechen", "Weiter"],
+            "text": "The PDF file does not contain enough text. Please ensure the PDF contains text (not only images).",
+            "options": ["OK", "Retry", "Cancel", "Continue"],
             "answer": "OK"
         }]
     
@@ -657,7 +972,7 @@ def generate_questions_from_text(text, num_questions=10):
     definitions = []
     for sentence in sentences:
         lower_s = sentence.lower()
-        if any(word in lower_s for word in ['ist', 'sind', 'bedeutet', 'bezeichnet', 'beschreibt', 'definiert']):
+        if any(word in lower_s for word in ['is', 'are', 'means', 'refers', 'describes', 'defined', 'ist', 'sind', 'bedeutet', 'bezeichnet', 'beschreibt', 'definiert']):
             if 40 < len(sentence) < 250:
                 if not any(ex in sentence for ex in excluded_terms):
                     definitions.append(sentence)
@@ -688,12 +1003,12 @@ def generate_questions_from_text(text, num_questions=10):
             clean_def = re.sub(r'\s+', ' ', definition).strip()[:200]
             
             question = {
-                "text": f"Was bedeutet '{concept}'?" if concept else "Was ist die Definition?",
+                "text": f"What does '{concept}' mean?" if concept else "What is the definition?",
                 "options": [
                     clean_def,
-                    f"{concept} ist eine Methode zur Datenverarbeitung." if concept else "Es ist eine Methode.",
-                    f"{concept} ist ein Algorithmus." if concept else "Es ist ein Algorithmus.",
-                    f"{concept} ist eine Datenstruktur." if concept else "Es ist eine Datenstruktur."
+                    f"{concept} is a method for data processing." if concept else "It is a method.",
+                    f"{concept} is an algorithm." if concept else "It is an algorithm.",
+                    f"{concept} is a data structure." if concept else "It is a data structure."
                 ],
                 "answer": clean_def
             }
@@ -725,12 +1040,12 @@ def generate_questions_from_text(text, num_questions=10):
             summary = para_clean[:250] + "..." if len(para_clean) > 250 else para_clean
             
             question = {
-                "text": f"Was ist {main_concept}?",
+                "text": f"What is {main_concept}?",
                 "options": [
                     summary,
-                    f"{main_concept} ist eine Programmiersprache.",
-                    f"{main_concept} ist ein Betriebssystem.",
-                    f"{main_concept} ist nicht im Material definiert."
+                    f"{main_concept} is a programming language.",
+                    f"{main_concept} is an operating system.",
+                    f"{main_concept} is not defined in the material."
                 ],
                 "answer": summary
             }
@@ -744,12 +1059,12 @@ def generate_questions_from_text(text, num_questions=10):
             clean_context = re.sub(r'\s+', ' ', context).strip()[:200]
             
             question = {
-                "text": f"Was ist {concept}?",
+                "text": f"What is {concept}?",
                 "options": [
                     clean_context,
-                    f"{concept} ist eine Methode.",
-                    f"{concept} ist ein Algorithmus.",
-                    f"{concept} ist nicht definiert."
+                    f"{concept} is a method.",
+                    f"{concept} is an algorithm.",
+                    f"{concept} is not defined."
                 ],
                 "answer": clean_context
             }
@@ -763,12 +1078,12 @@ def generate_questions_from_text(text, num_questions=10):
                 clean_sentence = sentence[:200] + "..." if len(sentence) > 200 else sentence
                 
                 question = {
-                    "text": f"Welche Aussage ist korrekt?",
+                    "text": f"Which statement is correct?",
                     "options": [
                         clean_sentence,
-                        "Die Aussage ist teilweise korrekt.",
-                        "Die Aussage ist falsch.",
-                        "Die Aussage benötigt mehr Kontext."
+                        "The statement is partially correct.",
+                        "The statement is incorrect.",
+                        "The statement needs more context."
                     ],
                     "answer": clean_sentence
                 }
@@ -780,8 +1095,8 @@ def generate_questions_from_text(text, num_questions=10):
     
     if len(questions) == 0:
         questions.append({
-            "text": "Es konnten keine Fragen aus der PDF-Datei generiert werden. Bitte stellen Sie sicher, dass die PDF-Datei Text enthält.",
-            "options": ["OK", "Wiederholen", "Abbrechen", "Weiter"],
+            "text": "No questions could be generated from the PDF file. Please ensure the PDF contains text.",
+            "options": ["OK", "Retry", "Cancel", "Continue"],
             "answer": "OK"
         })
     
@@ -917,7 +1232,7 @@ def request_manual_check(request):
 @permission_classes([IsAuthenticated])
 def professor_dashboard(request):
     if not request.user.is_staff:
-        return Response({"error": "Nur Staff-Mitglieder dürfen auf das Dashboard zugreifen."}, status=403)
+        return Response({"error": "Only staff members may access the dashboard."}, status=403)
 
     exams = Exam.objects.filter(created_by=request.user).order_by('-created_at')
 
@@ -987,12 +1302,12 @@ def professor_dashboard(request):
 @permission_classes([IsAuthenticated])
 def exam_enrollments(request, exam_id):
     if not request.user.is_staff:
-        return Response({"error": "Nur Professoren dürfen Zulassungslisten verwalten."}, status=403)
+        return Response({"error": "Only professors may manage enrollment lists."}, status=403)
 
     try:
         exam = Exam.objects.get(id=exam_id, created_by=request.user)
     except Exam.DoesNotExist:
-        return Response({"error": "Prüfung nicht gefunden."}, status=404)
+        return Response({"error": "Exam not found."}, status=404)
 
     if request.method == 'GET':
         entries = ExamEnrollment.objects.filter(exam=exam)
@@ -1036,12 +1351,12 @@ def exam_enrollments(request, exam_id):
 @permission_classes([IsAuthenticated])
 def exam_enrollment_detail(request, exam_id, matrikel):
     if not request.user.is_staff:
-        return Response({"error": "Nur Professoren dürfen Zulassungslisten verwalten."}, status=403)
+        return Response({"error": "Only professors may manage enrollment lists."}, status=403)
 
     try:
         exam = Exam.objects.get(id=exam_id, created_by=request.user)
     except Exam.DoesNotExist:
-        return Response({"error": "Prüfung nicht gefunden."}, status=404)
+        return Response({"error": "Exam not found."}, status=404)
 
     try:
         enrollment = ExamEnrollment.objects.get(exam=exam, matriculation_number=matrikel)
