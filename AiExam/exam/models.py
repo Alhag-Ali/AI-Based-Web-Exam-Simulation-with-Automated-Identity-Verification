@@ -144,9 +144,38 @@ class Flashcard(models.Model):
     answer = models.TextField()
     order = models.IntegerField(default=0)
     known = models.BooleanField(default=False)
+    source = models.CharField(max_length=20, default='rule', choices=[('rule', 'Rule-based'), ('ai', 'AI-generated')])
 
     class Meta:
         ordering = ['order']
 
     def __str__(self):
         return f"[{self.topic.title}] {self.question[:60]}"
+
+
+class QuizQuestion(models.Model):
+    topic = models.ForeignKey(LearningTopic, on_delete=models.CASCADE, related_name='quiz_questions')
+    text = models.TextField()
+    options = models.JSONField(default=list)
+    answer = models.TextField()
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"[Quiz] {self.text[:60]}"
+
+
+class MockExam(models.Model):
+    plan = models.ForeignKey(LearningPlan, on_delete=models.CASCADE, related_name='mock_exams')
+    title = models.CharField(max_length=200)
+    duration_minutes = models.IntegerField(default=30)
+    questions = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.plan.title} — {self.title}"

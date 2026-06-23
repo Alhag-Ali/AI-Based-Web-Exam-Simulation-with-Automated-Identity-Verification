@@ -103,7 +103,7 @@ function App() {
                   ? "Overview of all exams, participants and statistics."
                   : "Create an exam and generate questions with AI-RAG.")
               : studentTab === "learn"
-              ? "Upload lecture slides — get a study plan and flashcards."
+              ? "Upload lecture materials — get flashcards, quizzes & mock exams."
               : "Select an exam, verify your identity and start immediately."}
           </div>
         </div>

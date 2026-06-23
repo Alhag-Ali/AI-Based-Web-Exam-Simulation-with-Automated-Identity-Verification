@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import FlashcardViewer from "./FlashcardViewer";
+import QuizViewer from "./QuizViewer";
+import MockExamPage from "./MockExamPage";
 
 const API = "http://127.0.0.1:8000/api/students";
 
@@ -8,23 +10,32 @@ export default function LearningDashboard() {
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Token ${token}` };
 
-  const [plans, setPlans]               = useState([]);
-  const [activePlan, setActivePlan]     = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [activePlan, setActivePlan] = useState(null);
   const [flashcardTopic, setFlashcardTopic] = useState(null);
+  const [quizTopic, setQuizTopic] = useState(null);
+  const [mockExam, setMockExam] = useState(null);
 
-  const [uploading, setUploading]       = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [creatingPlan, setCreatingPlan] = useState(false);
-  const [msg, setMsg]                   = useState(null);
-  const [dragOver, setDragOver]         = useState(false);
+  const [generatingMock, setGeneratingMock] = useState(false);
+  const [generatingAll, setGeneratingAll] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef();
 
   const fetchPlans = async () => {
     try {
       const res = await axios.get(`${API}/learn/plans/`, { headers });
       setPlans(res.data);
-      if (res.data.length > 0 && !activePlan) setActivePlan(res.data[0]);
+      if (res.data.length > 0) {
+        setActivePlan(prev => {
+          if (!prev) return res.data[0];
+          return res.data.find(p => p.plan_id === prev.plan_id) || res.data[0];
+        });
+      }
     } catch {
-      setMsg({ type: "error", text: "Error loading." });
+      setMsg({ type: "error", text: "Error loading study plans." });
     }
   };
 
@@ -35,7 +46,7 @@ export default function LearningDashboard() {
       setMsg({ type: "error", text: "Only PDF files are accepted." });
       return;
     }
-    setMsg({ type: "info", text: "Analysing PDF…" });
+    setMsg({ type: "info", text: "Uploading and analysing PDF…" });
     setUploading(true);
     const form = new FormData();
     form.append("pdf_file", file);
@@ -46,11 +57,14 @@ export default function LearningDashboard() {
       const slide = uploadRes.data;
       setUploading(false);
       setCreatingPlan(true);
-      setMsg({ type: "info", text: `"${slide.title}" uploaded. Creating study plan…` });
+      setMsg({ type: "info", text: `"${slide.title}" uploaded. Generating study plan, flashcards & quizzes…` });
       const planRes = await axios.post(`${API}/learn/slides/${slide.id}/create-plan/`, {}, { headers });
       setCreatingPlan(false);
       setActivePlan(planRes.data);
-      setMsg({ type: "success", text: `Done! ${planRes.data.topic_count} topics detected.` });
+      const aiMsg = planRes.data.ai_generated
+        ? `AI-generated ${planRes.data.topic_count} topics, flashcards & quizzes ready!`
+        : `${planRes.data.topic_count} topics created with flashcards. Set GROQ_API_KEY for AI quizzes.`;
+      setMsg({ type: "success", text: aiMsg });
       fetchPlans();
     } catch (err) {
       setUploading(false);
@@ -59,19 +73,84 @@ export default function LearningDashboard() {
     }
   };
 
+  const handleGenerateMockExam = async () => {
+    if (!activePlan) return;
+    setGeneratingMock(true);
+    setMsg({ type: "info", text: "Generating mock exam from your lecture material…" });
+    try {
+      const res = await axios.post(
+        `${API}/learn/plans/${activePlan.plan_id}/mock-exam/generate/`, {}, { headers }
+      );
+      setMockExam(res.data);
+      setMsg({ type: "success", text: `Mock exam ready — ${res.data.question_count} questions!` });
+    } catch (err) {
+      setMsg({ type: "error", text: err.response?.data?.error || "Could not generate mock exam." });
+    } finally {
+      setGeneratingMock(false);
+    }
+  };
+
+  const handleStartExistingMock = async () => {
+    if (!activePlan) return;
+    try {
+      const res = await axios.get(`${API}/learn/plans/${activePlan.plan_id}/mock-exam/`, { headers });
+      setMockExam(res.data);
+    } catch {
+      handleGenerateMockExam();
+    }
+  };
+
+  const handleDeletePlan = async () => {
+    if (!activePlan) return;
+    if (!window.confirm(`Lernplan "${activePlan.slide_title}" wirklich löschen?`)) return;
+    try {
+      await axios.delete(`${API}/learn/plans/${activePlan.plan_id}/delete/`, { headers });
+      setActivePlan(null);
+      setMsg({ type: "success", text: "Lernplan gelöscht." });
+      fetchPlans();
+    } catch (err) {
+      setMsg({ type: "error", text: err.response?.data?.error || "Löschen fehlgeschlagen." });
+    }
+  };
+
+  const handleRegenerateAll = async () => {
+    if (!activePlan) return;
+    setGeneratingAll(true);
+    setMsg({ type: "info", text: "Regenerating AI flashcards and quizzes for all topics…" });
+    try {
+      const res = await axios.post(
+        `${API}/learn/plans/${activePlan.plan_id}/generate-all/`, {}, { headers }
+      );
+      setMsg({ type: "success", text: res.data.message });
+      fetchPlans();
+    } catch (err) {
+      setMsg({ type: "error", text: err.response?.data?.error || "AI generation failed." });
+    } finally {
+      setGeneratingAll(false);
+    }
+  };
+
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); };
   const onDragOver = (e) => { e.preventDefault(); setDragOver(true); };
 
   const completedCount = activePlan ? activePlan.topics.filter(t => t.status === "completed").length : 0;
   const progress = activePlan?.topic_count > 0 ? Math.round((completedCount / activePlan.topic_count) * 100) : 0;
+  const busy = uploading || creatingPlan || generatingMock || generatingAll;
 
-  const busy = uploading || creatingPlan;
+  if (mockExam) {
+    return (
+      <MockExamPage mockExam={mockExam} onExit={() => setMockExam(null)} />
+    );
+  }
 
   return (
     <div className="stack-lg">
 
       {flashcardTopic && (
         <FlashcardViewer topic={flashcardTopic} onClose={() => setFlashcardTopic(null)} />
+      )}
+      {quizTopic && (
+        <QuizViewer topic={quizTopic} onClose={() => setQuizTopic(null)} />
       )}
 
       <div
@@ -85,16 +164,20 @@ export default function LearningDashboard() {
         {busy ? (
           <div className="learn-dropzone-inner">
             <div className="learn-spinner" />
-            <p className="learn-dropzone-label">{uploading ? "Analysing PDF…" : "Creating study plan + flashcards…"}</p>
-            <p className="learn-dropzone-hint">This may take a few seconds.</p>
+            <p className="learn-dropzone-label">
+              {uploading ? "Analysing PDF…" : creatingPlan ? "Creating study plan + AI content…" : generatingMock ? "Building mock exam…" : "Regenerating content…"}
+            </p>
+            <p className="learn-dropzone-hint">This may take a minute with AI generation.</p>
           </div>
         ) : (
           <div className="learn-dropzone-inner">
             <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
             <p className="learn-dropzone-label">
-              Drag PDF here or <span className="learn-link">select file</span>
+              Drag lecture PDF here or <span className="learn-link">select file</span>
             </p>
-            <p className="learn-dropzone-hint">Upload lecture slides, scripts or chapters as PDF</p>
+            <p className="learn-dropzone-hint">
+              Upload slides, scripts or chapters — get flashcards, quizzes & mock exams
+            </p>
           </div>
         )}
       </div>
@@ -102,8 +185,8 @@ export default function LearningDashboard() {
       {msg && (
         <div className={`learn-msg learn-msg-${msg.type}`}>
           {msg.type === "success" && "✅ "}
-          {msg.type === "error"   && "❌ "}
-          {msg.type === "info"    && "⏳ "}
+          {msg.type === "error" && "❌ "}
+          {msg.type === "info" && "⏳ "}
           {msg.text}
         </div>
       )}
@@ -139,7 +222,7 @@ export default function LearningDashboard() {
               <div style={{
                 fontSize: 22, fontWeight: 800,
                 color: progress === 100 ? "var(--success)" : "var(--primary)",
-                minWidth: 52, textAlign: "right"
+                minWidth: 52, textAlign: "right",
               }}>
                 {progress}%
               </div>
@@ -157,11 +240,37 @@ export default function LearningDashboard() {
                 {activePlan.topics.filter(t => t.status === "open").length} open
               </span>
             </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+              <button
+                className="btn"
+                style={{ flex: 1, minWidth: 160 }}
+                onClick={activePlan.has_mock_exam ? handleStartExistingMock : handleGenerateMockExam}
+                disabled={generatingMock}
+              >
+                📝 {activePlan.has_mock_exam ? "Start Mock Exam" : "Generate Mock Exam"}
+              </button>
+              <button
+                className="btn secondary"
+                style={{ flex: 1, minWidth: 160 }}
+                onClick={handleRegenerateAll}
+                disabled={generatingAll}
+              >
+                ✨ Regenerate with AI
+              </button>
+              <button
+                className="btn danger"
+                style={{ minWidth: 120 }}
+                onClick={handleDeletePlan}
+              >
+                🗑 Löschen
+              </button>
+            </div>
           </div>
 
           <div>
             <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, opacity: 0.8 }}>
-              🃏 Topics &amp; Flashcards
+              📚 Topics — Flashcards & Quizzes
             </h3>
             <div className="learn-topics-grid">
               {activePlan.topics.map((topic, i) => {
@@ -170,8 +279,7 @@ export default function LearningDashboard() {
                   <div
                     key={topic.id}
                     className="learn-topic-card card"
-                    style={{ cursor: "pointer", border: done ? "1px solid var(--success)" : undefined }}
-                    onClick={() => setFlashcardTopic(topic)}
+                    style={{ border: done ? "1px solid var(--success)" : undefined }}
                   >
                     <div className="learn-topic-header">
                       <div className="learn-topic-index">{i + 1}</div>
@@ -194,13 +302,28 @@ export default function LearningDashboard() {
                       </div>
                     )}
 
-                    <button
-                      className="btn"
-                      style={{ marginTop: 12, width: "100%", fontSize: 13 }}
-                      onClick={(e) => { e.stopPropagation(); setFlashcardTopic(topic); }}
-                    >
-                      🃏 Study Flashcards
-                    </button>
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <button
+                        className="btn"
+                        style={{ flex: 1, fontSize: 13 }}
+                        onClick={() => setFlashcardTopic(topic)}
+                      >
+                        🃏 Flashcards
+                        {topic.flashcard_count > 0 && (
+                          <span style={{ opacity: 0.7, marginLeft: 4 }}>({topic.flashcard_count})</span>
+                        )}
+                      </button>
+                      <button
+                        className="btn secondary"
+                        style={{ flex: 1, fontSize: 13 }}
+                        onClick={() => setQuizTopic(topic)}
+                      >
+                        ❓ Quiz
+                        {topic.quiz_count > 0 && (
+                          <span style={{ opacity: 0.7, marginLeft: 4 }}>({topic.quiz_count})</span>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -213,9 +336,9 @@ export default function LearningDashboard() {
       {plans.length === 0 && !busy && (
         <div className="card" style={{ textAlign: "center", padding: "48px 24px", opacity: 0.7 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📚</div>
-          <p style={{ fontWeight: 600, margin: "0 0 6px" }}>No slides uploaded yet</p>
+          <p style={{ fontWeight: 600, margin: "0 0 6px" }}>No lecture materials uploaded yet</p>
           <p className="subtle" style={{ fontSize: 13 }}>
-            Upload a PDF file above — the system automatically creates topics and flashcards.
+            Upload a PDF above — the platform creates topics, flashcards, quizzes and mock exams automatically.
           </p>
         </div>
       )}

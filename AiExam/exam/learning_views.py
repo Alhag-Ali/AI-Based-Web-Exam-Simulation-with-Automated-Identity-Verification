@@ -11,10 +11,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.views import APIView
 
-from .models import LectureSlide, LearningPlan, LearningTopic, Flashcard
+from .models import (
+    LectureSlide, LearningPlan, LearningTopic, Flashcard,
+    QuizQuestion, MockExam,
+)
 
 
 def _fix_umlauts(text):
@@ -64,6 +65,35 @@ def _extract_text_from_pdf(path):
     return "\n\n".join(parts), len(reader.pages)
 
 
+def _is_noise_title(title):
+    t = title.strip().lower()
+    if len(t) < 3:
+        return True
+    noise = [
+        r'^(prof|dr|pd)\.',
+        r'sose|wise\s*\d',
+        r'^\d{1,2}$',
+        r'^(seite|page)\s*\d',
+        r'@|\.de$|\.com$',
+    ]
+    return any(re.search(p, t) for p in noise)
+
+
+def _dedupe_and_filter_sections(sections):
+    merged = {}
+    for title, raw_text in sections:
+        title = title.strip()[:300]
+        raw_text = raw_text.strip()
+        if len(raw_text) < 120 or _is_noise_title(title):
+            continue
+        key = title.lower()
+        if key in merged:
+            merged[key] = merged[key] + "\n\n" + raw_text
+        else:
+            merged[key] = raw_text
+    return list(merged.items())[:10]
+
+
 def _split_into_topics(text):
     heading_pattern = re.compile(
         r'^(?:'
@@ -111,7 +141,7 @@ def _split_into_topics(text):
             first_sentence = re.split(r'[.!?]', chunk[0])[0][:60].strip() if chunk else f"Abschnitt {i+1}"
             sections.append((first_sentence or f"Abschnitt {i+1}", "\n\n".join(chunk)))
 
-    return sections[:12]
+    return _dedupe_and_filter_sections(sections)
 
 
 def _make_summary(raw_text):
@@ -141,6 +171,123 @@ def _extract_key_concepts(raw_text):
     )[:8]
 
     return [k for k, _ in top]
+
+
+def _get_groq_key(request):
+    return request.data.get('groq_api_key') or os.environ.get('GROQ_API_KEY')
+
+
+def _ai_available(request):
+    return bool(_get_groq_key(request))
+
+
+def _topic_rag_payload(topic):
+    return {
+        'title': topic.title,
+        'raw_text': topic.raw_text or '',
+        'summary': topic.summary or '',
+        'key_concepts': topic.key_concepts if isinstance(topic.key_concepts, list) else [],
+    }
+
+
+def _generate_flashcards_for_topic(topic, pdf_text, groq_api_key=None, session=None):
+    if groq_api_key and pdf_text:
+        try:
+            from .rag_service import generate_flashcards_for_topic_rag
+            payload = _topic_rag_payload(topic)
+            cards = generate_flashcards_for_topic_rag(
+                pdf_text=pdf_text,
+                topic_title=payload['title'],
+                summary=payload['summary'],
+                key_concepts=payload['key_concepts'],
+                count=8,
+                groq_api_key=groq_api_key,
+                session=session,
+            )
+            if cards:
+                return cards, 'ai'
+        except Exception as e:
+            print(f"[Learn] RAG flashcards failed for '{topic.title}': {e}")
+
+    cards = _generate_flashcards(topic)
+    return (cards, 'rule') if cards else ([], 'rule')
+
+
+def _generate_quiz_for_topic(topic, pdf_text, groq_api_key=None, n=2, existing=None, session=None):
+    if groq_api_key and pdf_text:
+        try:
+            from .rag_service import generate_questions_for_topic_rag
+            payload = _topic_rag_payload(topic)
+            qs = generate_questions_for_topic_rag(
+                pdf_text=pdf_text,
+                topic_title=payload['title'],
+                summary=payload['summary'],
+                key_concepts=payload['key_concepts'],
+                n=n,
+                groq_api_key=groq_api_key,
+                existing_questions=existing,
+                session=session,
+            )
+            if qs:
+                return qs
+        except Exception as e:
+            print(f"[Learn] RAG quiz failed for '{topic.title}': {e}")
+    return []
+
+
+def _save_flashcards(topic, cards_data, source='rule'):
+    Flashcard.objects.filter(topic=topic).delete()
+    for j, card in enumerate(cards_data):
+        Flashcard.objects.create(
+            topic=topic,
+            question=card['question'],
+            answer=card['answer'],
+            order=j,
+            known=False,
+            source=source,
+        )
+
+
+def _save_quiz_questions(topic, questions_data):
+    QuizQuestion.objects.filter(topic=topic).delete()
+    for j, q in enumerate(questions_data):
+        QuizQuestion.objects.create(
+            topic=topic,
+            text=q['text'],
+            options=q.get('options', []),
+            answer=q.get('answer', ''),
+            order=j,
+        )
+
+
+def _topic_to_dict(topic):
+    return {
+        'id': topic.id,
+        'title': topic.title,
+        'summary': topic.summary,
+        'key_concepts': topic.key_concepts,
+        'order': topic.order,
+        'status': topic.status,
+        'flashcard_count': topic.flashcards.count(),
+        'quiz_count': topic.quiz_questions.count(),
+    }
+
+
+def _plan_to_dict(plan):
+    topics = [_topic_to_dict(t) for t in plan.topics.all()]
+    latest_mock = plan.mock_exams.first()
+    return {
+        'plan_id': plan.id,
+        'plan_title': plan.title,
+        'slide_title': plan.slide.title,
+        'slide_pages': plan.slide.page_count,
+        'created_at': plan.created_at.isoformat(),
+        'topic_count': len(topics),
+        'topics_completed': sum(1 for t in topics if t['status'] == 'completed'),
+        'topics': topics,
+        'has_mock_exam': latest_mock is not None,
+        'mock_exam_id': latest_mock.id if latest_mock else None,
+    }
 
 
 @api_view(['POST'])
@@ -211,6 +358,18 @@ def create_learning_plan(request, slide_id):
     )
 
     sections = _split_into_topics(slide.text_content)
+    groq_key = _get_groq_key(request)
+    ai_used = bool(groq_key)
+    total_quiz = 0
+
+    rag_session = None
+    if ai_used:
+        try:
+            from .rag_service import SlideRAGSession
+            rag_session = SlideRAGSession(slide.text_content, groq_key)
+        except Exception as e:
+            print(f"[Learn] RAG session init failed: {e}")
+            rag_session = None
 
     for i, (title, raw_text) in enumerate(sections):
         summary = _make_summary(raw_text)
@@ -224,44 +383,40 @@ def create_learning_plan(request, slide_id):
             order=i,
             status='open',
         )
-        cards_data = _generate_flashcards(topic)
-        for j, card in enumerate(cards_data):
-            Flashcard.objects.create(
-                topic=topic,
-                question=card['question'],
-                answer=card['answer'],
-                order=j,
-                known=False,
-            )
+        cards_data, source = _generate_flashcards_for_topic(
+            topic, slide.text_content, groq_key, session=rag_session
+        )
+        _save_flashcards(topic, cards_data, source)
 
-    topics = list(plan.topics.values('id', 'title', 'summary', 'key_concepts', 'order', 'status'))
+        if ai_used and rag_session and cards_data:
+            quiz_data = _generate_quiz_for_topic(
+                topic, slide.text_content, groq_key, n=2, session=rag_session
+            )
+            if quiz_data:
+                _save_quiz_questions(topic, quiz_data)
+                total_quiz += len(quiz_data)
+
+    topics = [_topic_to_dict(t) for t in plan.topics.all()]
 
     return Response({
-        'plan_id': plan.id,
-        'plan_title': plan.title,
-        'slide_title': slide.title,
-        'topic_count': len(topics),
-        'topics': topics,
+        **_plan_to_dict(plan),
+        'ai_generated': ai_used,
+        'quiz_count': total_quiz,
+        'message': (
+            'Study plan created with AI-generated flashcards and quizzes.'
+            if ai_used else
+            'Study plan created. Set GROQ_API_KEY for AI-generated content.'
+        ),
     }, status=201)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_learning_plans(request):
-    plans = LearningPlan.objects.filter(student=request.user).select_related('slide').prefetch_related('topics')
-    result = []
-    for plan in plans.order_by('-created_at'):
-        topics = list(plan.topics.values('id', 'title', 'summary', 'key_concepts', 'order', 'status'))
-        result.append({
-            'plan_id': plan.id,
-            'plan_title': plan.title,
-            'slide_title': plan.slide.title,
-            'slide_pages': plan.slide.page_count,
-            'created_at': plan.created_at.isoformat(),
-            'topic_count': len(topics),
-            'topics_completed': sum(1 for t in topics if t['status'] == 'completed'),
-            'topics': topics,
-        })
+    plans = LearningPlan.objects.filter(student=request.user).select_related('slide').prefetch_related(
+        'topics__flashcards', 'topics__quiz_questions', 'mock_exams'
+    )
+    result = [_plan_to_dict(plan) for plan in plans.order_by('-created_at')]
     return Response(result)
 
 
@@ -269,23 +424,13 @@ def list_learning_plans(request):
 @permission_classes([IsAuthenticated])
 def get_learning_plan(request, plan_id):
     try:
-        plan = LearningPlan.objects.select_related('slide').prefetch_related('topics').get(
-            id=plan_id, student=request.user
-        )
+        plan = LearningPlan.objects.select_related('slide').prefetch_related(
+            'topics__flashcards', 'topics__quiz_questions', 'mock_exams'
+        ).get(id=plan_id, student=request.user)
     except LearningPlan.DoesNotExist:
         return Response({'error': 'Study plan not found.'}, status=404)
 
-    topics = list(plan.topics.values('id', 'title', 'summary', 'key_concepts', 'order', 'status'))
-    return Response({
-        'plan_id': plan.id,
-        'plan_title': plan.title,
-        'slide_title': plan.slide.title,
-        'slide_pages': plan.slide.page_count,
-        'created_at': plan.created_at.isoformat(),
-        'topic_count': len(topics),
-        'topics_completed': sum(1 for t in topics if t['status'] == 'completed'),
-        'topics': topics,
-    })
+    return Response(_plan_to_dict(plan))
 
 
 def _generate_flashcards(topic):
@@ -359,31 +504,33 @@ def _generate_flashcards(topic):
 @permission_classes([IsAuthenticated])
 def generate_flashcards(request, topic_id):
     try:
-        topic = LearningTopic.objects.select_related('plan__student').get(
+        topic = LearningTopic.objects.select_related('plan__slide', 'plan__student').get(
             id=topic_id, plan__student=request.user
         )
     except LearningTopic.DoesNotExist:
         return Response({'error': 'Topic not found.'}, status=404)
 
-    Flashcard.objects.filter(topic=topic).delete()
+    groq_key = _get_groq_key(request)
+    cards_data, source = _generate_flashcards_for_topic(
+        topic, topic.plan.slide.text_content, groq_key
+    )
+    _save_flashcards(topic, cards_data, source)
 
-    cards_data = _generate_flashcards(topic)
-    created = []
-    for i, card in enumerate(cards_data):
-        fc = Flashcard.objects.create(
-            topic=topic,
-            question=card['question'],
-            answer=card['answer'],
-            order=i,
-            known=False,
-        )
-        created.append({'id': fc.id, 'question': fc.question, 'answer': fc.answer, 'order': fc.order, 'known': fc.known})
+    if not cards_data:
+        return Response({
+            'error': 'Keine Karteikarten generiert. Bitte GROQ_API_KEY prüfen und erneut versuchen.'
+        }, status=500)
+
+    created = list(topic.flashcards.values(
+        'id', 'question', 'answer', 'order', 'known', 'source'
+    ))
 
     return Response({
         'topic_id': topic.id,
         'topic_title': topic.title,
         'flashcard_count': len(created),
         'flashcards': created,
+        'source': source,
     }, status=201)
 
 
@@ -423,6 +570,181 @@ def mark_flashcard(request, card_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_quiz(request, topic_id):
+    try:
+        topic = LearningTopic.objects.select_related('plan__student').get(
+            id=topic_id, plan__student=request.user
+        )
+    except LearningTopic.DoesNotExist:
+        return Response({'error': 'Topic not found.'}, status=404)
+
+    questions = list(topic.quiz_questions.values('id', 'text', 'options', 'answer', 'order'))
+    return Response({
+        'topic_id': topic.id,
+        'topic_title': topic.title,
+        'question_count': len(questions),
+        'questions': questions,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_quiz(request, topic_id):
+    try:
+        topic = LearningTopic.objects.select_related('plan__slide', 'plan__student').get(
+            id=topic_id, plan__student=request.user
+        )
+    except LearningTopic.DoesNotExist:
+        return Response({'error': 'Topic not found.'}, status=404)
+
+    groq_key = _get_groq_key(request)
+    if not groq_key:
+        return Response({
+            'error': 'AI generation requires GROQ_API_KEY. Set it as an environment variable.'
+        }, status=400)
+
+    n = int(request.data.get('count', 3))
+    quiz_data = _generate_quiz_for_topic(
+        topic, topic.plan.slide.text_content, groq_key, n=n
+    )
+    if not quiz_data:
+        return Response({'error': 'Could not generate quiz questions.'}, status=500)
+
+    _save_quiz_questions(topic, quiz_data)
+    questions = list(topic.quiz_questions.values('id', 'text', 'options', 'answer', 'order'))
+
+    return Response({
+        'topic_id': topic.id,
+        'topic_title': topic.title,
+        'question_count': len(questions),
+        'questions': questions,
+    }, status=201)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_mock_exam(request, plan_id):
+    try:
+        plan = LearningPlan.objects.select_related('slide').prefetch_related('topics').get(
+            id=plan_id, student=request.user
+        )
+    except LearningPlan.DoesNotExist:
+        return Response({'error': 'Study plan not found.'}, status=404)
+
+    groq_key = _get_groq_key(request)
+    if not groq_key:
+        return Response({
+            'error': 'Mock exam requires GROQ_API_KEY for RAG-based generation.'
+        }, status=400)
+
+    topics = list(plan.topics.all())
+    if not topics:
+        return Response({'error': 'No topics in this plan.'}, status=400)
+
+    from .rag_service import generate_mock_exam_rag
+    topics_data = [_topic_rag_payload(t) for t in topics]
+    all_questions = generate_mock_exam_rag(
+        pdf_text=plan.slide.text_content,
+        topics=topics_data,
+        groq_api_key=groq_key,
+        questions_per_topic=2,
+        max_questions=20,
+    )
+
+    if not all_questions:
+        return Response({'error': 'Could not generate mock exam from slide content.'}, status=500)
+
+    plan.mock_exams.all().delete()
+    duration = min(90, max(15, len(all_questions) * 2))
+    mock = MockExam.objects.create(
+        plan=plan,
+        title=f"Mock Exam: {plan.slide.title}",
+        duration_minutes=duration,
+        questions=all_questions[:20],
+    )
+
+    return Response({
+        'mock_exam_id': mock.id,
+        'title': mock.title,
+        'duration_minutes': mock.duration_minutes,
+        'question_count': len(mock.questions),
+        'questions': mock.questions,
+    }, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_mock_exam(request, plan_id):
+    try:
+        plan = LearningPlan.objects.get(id=plan_id, student=request.user)
+    except LearningPlan.DoesNotExist:
+        return Response({'error': 'Study plan not found.'}, status=404)
+
+    mock = plan.mock_exams.first()
+    if not mock:
+        return Response({'error': 'No mock exam generated yet.'}, status=404)
+
+    return Response({
+        'mock_exam_id': mock.id,
+        'title': mock.title,
+        'duration_minutes': mock.duration_minutes,
+        'question_count': len(mock.questions),
+        'questions': mock.questions,
+        'created_at': mock.created_at.isoformat(),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_all_content(request, plan_id):
+    """Regenerate AI flashcards and quizzes for all topics in a plan."""
+    try:
+        plan = LearningPlan.objects.select_related('slide').prefetch_related('topics').get(
+            id=plan_id, student=request.user
+        )
+    except LearningPlan.DoesNotExist:
+        return Response({'error': 'Study plan not found.'}, status=404)
+
+    groq_key = _get_groq_key(request)
+    if not groq_key:
+        return Response({
+            'error': 'AI generation requires GROQ_API_KEY.'
+        }, status=400)
+
+    total_cards = 0
+    total_quiz = 0
+
+    rag_session = None
+    try:
+        from .rag_service import SlideRAGSession
+        rag_session = SlideRAGSession(plan.slide.text_content, groq_key)
+    except Exception as e:
+        return Response({'error': f'RAG init failed: {e}'}, status=500)
+
+    for topic in plan.topics.all():
+        cards_data, source = _generate_flashcards_for_topic(
+            topic, plan.slide.text_content, groq_key, session=rag_session
+        )
+        _save_flashcards(topic, cards_data, source)
+        total_cards += len(cards_data)
+
+        quiz_data = _generate_quiz_for_topic(
+            topic, plan.slide.text_content, groq_key, n=2, session=rag_session
+        )
+        if quiz_data:
+            _save_quiz_questions(topic, quiz_data)
+            total_quiz += len(quiz_data)
+
+    return Response({
+        'plan_id': plan.id,
+        'flashcard_count': total_cards,
+        'quiz_count': total_quiz,
+        'message': f'RAG: {total_cards} flashcards and {total_quiz} quiz questions generated from slide content.',
+    }, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def list_lecture_slides(request):
     slides = LectureSlide.objects.filter(student=request.user).order_by('-created_at')
     result = []
@@ -438,3 +760,27 @@ def list_lecture_slides(request):
             'has_plan': plan_count > 0,
         })
     return Response(result)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_learning_plan(request, plan_id):
+    try:
+        plan = LearningPlan.objects.select_related('slide').get(
+            id=plan_id, student=request.user
+        )
+    except LearningPlan.DoesNotExist:
+        return Response({'error': 'Study plan not found.'}, status=404)
+
+    slide = plan.slide
+    title = plan.title
+    plan.delete()
+
+    if not LearningPlan.objects.filter(slide=slide).exists():
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pdf_path = os.path.join(base_dir, 'uploads', 'slides', slide.file_name)
+        if os.path.isfile(pdf_path):
+            os.remove(pdf_path)
+        slide.delete()
+
+    return Response({'message': f'"{title}" deleted.'}, status=200)

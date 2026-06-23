@@ -27,8 +27,11 @@ function FlashcardViewer({ topic, onClose }) {
   const knownCount = cards.filter(c => c.known).length;
   const progress = cards.length > 0 ? Math.round((knownCount / cards.length) * 100) : 0;
 
+  const [errorMsg, setErrorMsg] = useState(null);
+
   const fetchCards = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await axios.get(`${API}/learn/topics/${topic.id}/flashcards/`, { headers });
       if (res.data.flashcard_count === 0) {
@@ -45,11 +48,13 @@ function FlashcardViewer({ topic, onClose }) {
 
   const generateCards = async () => {
     setGenerating(true);
+    setErrorMsg(null);
     try {
       const res = await axios.post(`${API}/learn/topics/${topic.id}/flashcards/generate/`, {}, { headers });
-      setCards(res.data.flashcards);
-    } catch {
+      setCards(res.data.flashcards || []);
+    } catch (err) {
       setCards([]);
+      setErrorMsg(err.response?.data?.error || "Generierung fehlgeschlagen. GROQ_API_KEY auf dem Server prüfen.");
     } finally {
       setGenerating(false);
     }
@@ -104,8 +109,9 @@ function FlashcardViewer({ topic, onClose }) {
             <button className="fc-close" onClick={onClose}>✕</button>
           </div>
           <div className="fc-empty">
-            <p>No flashcards can be generated for this topic.</p>
-            <button className="btn secondary" onClick={onClose}>Close</button>
+            <p>{errorMsg || "Keine Karteikarten für dieses Topic."}</p>
+            <button className="btn" style={{ marginRight: 8 }} onClick={generateCards}>Erneut versuchen</button>
+            <button className="btn secondary" onClick={onClose}>Schließen</button>
           </div>
         </div>
       </div>
