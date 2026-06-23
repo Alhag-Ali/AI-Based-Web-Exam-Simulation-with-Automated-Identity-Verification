@@ -7,6 +7,7 @@ from .learning_views import (
     get_quiz, generate_quiz, generate_mock_exam, get_mock_exam,
     generate_all_content, delete_learning_plan,
 )
+from .dashboard_views import student_dashboard, save_mock_exam_attempt
 from .rag_views import rag_generate_questions
 
 urlpatterns = [
@@ -36,6 +37,9 @@ urlpatterns = [
     path('learn/plans/<int:plan_id>/mock-exam/', get_mock_exam, name='learn-mock-exam-get'),
     path('learn/plans/<int:plan_id>/mock-exam/generate/', generate_mock_exam, name='learn-mock-exam-generate'),
     path('learn/plans/<int:plan_id>/generate-all/', generate_all_content, name='learn-generate-all'),
+
+    path('dashboard/student/', student_dashboard, name='student-dashboard'),
+    path('learn/mock-exams/<int:mock_exam_id>/attempt/', save_mock_exam_attempt, name='mock-exam-attempt'),
 
     path('exams/<int:exam_id>/rag-generate/', rag_generate_questions, name='rag-generate-questions'),
     path('professor/dashboard/', professor_dashboard, name='professor-dashboard'),

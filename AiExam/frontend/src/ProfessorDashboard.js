@@ -101,17 +101,20 @@ function ProfessorDashboard({ onCreateExam }) {
   if (error) return <div className="card" style={{ borderColor: "rgba(239,68,68,.35)" }}><p style={{ color: "#fecaca", margin: 0 }}>{error}</p></div>;
   if (!data) return null;
 
-  const now = new Date();
   const pastExams = data.exams.filter(e => e.is_past).length;
   const upcomingExams = data.exams.filter(e => !e.is_past).length;
+  const insights = data.knowledge_gaps_aggregate || [];
+  const studentProgress = data.student_progress || [];
 
   return (
     <div className="stack-lg">
       {/* Stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
         {[
           { label: "Total Exams", value: data.total_exams, icon: "📋" },
           { label: "Total Participants", value: data.total_participants, icon: "👥" },
+          { label: "Students Tracked", value: data.students_tracked || 0, icon: "🎓" },
+          { label: "Avg. Mastery", value: `${data.avg_mastery_pct || 0}%`, icon: "📈" },
           { label: "Past", value: pastExams, icon: "✅" },
           { label: "Upcoming", value: upcomingExams, icon: "📅" },
         ].map(s => (
@@ -122,6 +125,58 @@ function ProfessorDashboard({ onCreateExam }) {
           </div>
         ))}
       </div>
+
+      {/* Class knowledge gaps */}
+      {insights.length > 0 && (
+        <div>
+          <h3 style={{ margin: "0 0 12px" }}>⚠️ Class Knowledge Gaps</h3>
+          <div className="stack" style={{ gap: 8 }}>
+            {insights.map((g, i) => (
+              <div key={i} className="card" style={{ padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{g.topic}</div>
+                  <div className="subtle" style={{ fontSize: 12 }}>{g.students_affected} student(s) affected · avg. {g.avg_mastery_pct}% mastery</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Individual student progress */}
+      {studentProgress.length > 0 && (
+        <div>
+          <h3 style={{ margin: "0 0 12px" }}>👤 Individual Progress</h3>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
+                  {["Student", "Matrikel", "Exams", "Plans", "Mastery", "Topics"].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: "var(--muted)", fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {studentProgress.map(s => (
+                  <tr key={s.student_id} style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+                    <td style={{ padding: "10px 12px" }}>
+                      <div style={{ fontWeight: 600 }}>{s.name}</div>
+                      <div className="subtle" style={{ fontSize: 12 }}>{s.email}</div>
+                    </td>
+                    <td style={{ padding: "10px 12px", fontFamily: "monospace" }}>{s.matriculation_number}</td>
+                    <td style={{ padding: "10px 12px" }}>{s.exams_joined.length}</td>
+                    <td style={{ padding: "10px 12px" }}>{s.learning.plans_count}</td>
+                    <td style={{ padding: "10px 12px", fontWeight: 700, color: s.learning.mastery_pct >= 70 ? "var(--success)" : s.learning.mastery_pct >= 40 ? "var(--warning)" : "var(--danger)" }}>
+                      {s.learning.mastery_pct}%
+                    </td>
+                    <td style={{ padding: "10px 12px" }}>{s.learning.topics_completed}/{s.learning.topics_total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Exam list */}
       <div className="stack">

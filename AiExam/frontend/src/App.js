@@ -5,6 +5,7 @@ import VerificationPage from "./VerificationPage";
 import ExamPage from "./ExamPage";
 import CreateExam from "./CreateExam";
 import LearningDashboard from "./LearningDashboard";
+import StudentDashboard from "./StudentDashboard";
 import ProfessorDashboard from "./ProfessorDashboard";
 import axios from "axios";
 import "./App.css";
@@ -14,7 +15,7 @@ function App() {
   const [currentExam,   setCurrentExam]   = useState(null);
   const [verifyingExam, setVerifyingExam] = useState(null); // exam pending verification
   const [isStaff, setIsStaff] = useState(false);
-  const [studentTab, setStudentTab] = useState("exams");
+  const [studentTab, setStudentTab] = useState("dashboard");
   const [profTab, setProfTab] = useState("dashboard");
   const [loading, setLoading] = useState(true);
 
@@ -95,13 +96,16 @@ function App() {
           <div className="hero-title">
             {viewMode === "staff"
               ? (profTab === "dashboard" ? "Professor Dashboard" : "Create New Exam")
+              : studentTab === "dashboard" ? "Mein Dashboard"
               : studentTab === "learn" ? "Learning Area" : "Student Dashboard"}
           </div>
           <div className="hero-subtle">
             {viewMode === "staff"
               ? (profTab === "dashboard"
-                  ? "Overview of all exams, participants and statistics."
+                  ? "Class performance, knowledge gaps and individual student progress."
                   : "Create an exam and generate questions with AI-RAG.")
+              : studentTab === "dashboard"
+              ? "Track your learning journey and prepare effectively for exams."
               : studentTab === "learn"
               ? "Upload lecture materials — get flashcards, quizzes & mock exams."
               : "Select an exam, verify your identity and start immediately."}
@@ -114,6 +118,8 @@ function App() {
           ) : (
             <CreateExam onCreated={() => setProfTab("dashboard")} />
           )
+        ) : studentTab === "dashboard" ? (
+          <StudentDashboard onGoLearn={() => setStudentTab("learn")} onGoExams={() => setStudentTab("exams")} />
         ) : studentTab === "learn" ? (
           <LearningDashboard />
         ) : verifyingExam ? (
@@ -147,11 +153,14 @@ function TopBar({ isStaff, viewMode, studentTab, onStudentTabChange, profTab, on
         <div className="row" style={{ gap: 12, alignItems: "center" }}>
           {viewMode === "student" && (
             <div className="mode-switch">
-              <button className={`mode-btn ${studentTab === "exams" ? "active" : ""}`} onClick={() => onStudentTabChange("exams")}>
-                Exams
+              <button className={`mode-btn ${studentTab === "dashboard" ? "active" : ""}`} onClick={() => onStudentTabChange("dashboard")}>
+                Dashboard
               </button>
               <button className={`mode-btn ${studentTab === "learn" ? "active" : ""}`} onClick={() => onStudentTabChange("learn")}>
                 Learn
+              </button>
+              <button className={`mode-btn ${studentTab === "exams" ? "active" : ""}`} onClick={() => onStudentTabChange("exams")}>
+                Exams
               </button>
             </div>
           )}

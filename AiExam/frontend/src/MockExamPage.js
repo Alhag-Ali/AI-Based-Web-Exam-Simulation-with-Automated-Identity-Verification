@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import axios from "axios";
 
 function MockExamPage({ mockExam, onExit }) {
   const [questions, setQuestions] = useState([]);
@@ -51,51 +52,7 @@ function MockExamPage({ mockExam, onExit }) {
   if (showResults) {
     const score = calculateScore();
     return (
-      <div className="stack-lg">
-        <div className="section-title">
-          <span className="emoji">📊</span>
-          <h2 style={{ margin: 0 }}>Mock Exam Results</h2>
-        </div>
-        <div className="card" style={{ textAlign: "center", padding: 32 }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>
-            {score.percentage >= 70 ? "✅" : score.percentage >= 50 ? "⚠️" : "❌"}
-          </div>
-          <h3 style={{ margin: "0 0 8px", fontSize: 24 }}>
-            {score.correct} of {score.total} correct
-          </h3>
-          <div style={{
-            fontSize: 32, fontWeight: 700,
-            color: score.percentage >= 70 ? "var(--success)" : score.percentage >= 50 ? "var(--warning)" : "var(--danger)",
-          }}>
-            {score.percentage}%
-          </div>
-        </div>
-        <div className="stack">
-          {questions.map((q, idx) => {
-            const userAnswer = answers[idx];
-            const isCorrect = userAnswer === q.answer;
-            return (
-              <div key={idx} className="card" style={{ borderLeft: `4px solid ${isCorrect ? "var(--success)" : "var(--danger)"}` }}>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Q{idx + 1}: {q.text}</div>
-                {Array.isArray(q.options) && q.options.map((opt, i) => {
-                  const isSelected = userAnswer === opt;
-                  const isCorrectAnswer = opt === q.answer;
-                  return (
-                    <div key={i} style={{
-                      padding: "6px 10px", marginBottom: 3, borderRadius: 6,
-                      backgroundColor: isCorrectAnswer ? "rgba(34,197,94,0.15)" : isSelected ? "rgba(239,68,68,0.15)" : "transparent",
-                    }}>
-                      {opt}
-                      {isCorrectAnswer && <span style={{ marginLeft: 8, color: "var(--success)" }}>✓</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-        <button className="btn secondary" onClick={onExit}>Back to Learning</button>
-      </div>
+      <ResultsView score={score} mockExam={mockExam} questions={questions} answers={answers} onExit={onExit} />
     );
   }
 
@@ -173,3 +130,66 @@ function MockExamPage({ mockExam, onExit }) {
 }
 
 export default MockExamPage;
+
+
+function ResultsView({ score, mockExam, questions, answers, onExit }) {
+  const savedRef = useRef(false);
+
+  useEffect(() => {
+    if (savedRef.current || !mockExam?.mock_exam_id) return;
+    savedRef.current = true;
+    const token = localStorage.getItem("token");
+    axios.post(
+      `http://127.0.0.1:8000/api/students/learn/mock-exams/${mockExam.mock_exam_id}/attempt/`,
+      { correct: score.correct, total: score.total, score_pct: score.percentage },
+      { headers: { Authorization: `Token ${token}` } }
+    ).catch(() => {});
+  }, [mockExam, score]);
+
+  return (
+    <div className="stack-lg">
+      <div className="section-title">
+        <span className="emoji">📊</span>
+        <h2 style={{ margin: 0 }}>Mock Exam Ergebnis</h2>
+      </div>
+      <div className="card" style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>
+          {score.percentage >= 70 ? "✅" : score.percentage >= 50 ? "⚠️" : "❌"}
+        </div>
+        <h3 style={{ margin: "0 0 8px", fontSize: 24 }}>
+          {score.correct} von {score.total} richtig
+        </h3>
+        <div style={{
+          fontSize: 32, fontWeight: 700,
+          color: score.percentage >= 70 ? "var(--success)" : score.percentage >= 50 ? "var(--warning)" : "var(--danger)",
+        }}>
+          {score.percentage}%
+        </div>
+      </div>
+      <div className="stack">
+        {questions.map((q, idx) => {
+          const userAnswer = answers[idx];
+          const isCorrect = userAnswer === q.answer;
+          return (
+            <div key={idx} className="card" style={{ borderLeft: `4px solid ${isCorrect ? "var(--success)" : "var(--danger)"}` }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Q{idx + 1}: {q.text}</div>
+              {Array.isArray(q.options) && q.options.map((opt, i) => {
+                const isCorrectAnswer = opt === q.answer;
+                return (
+                  <div key={i} style={{
+                    padding: "6px 10px", marginBottom: 3, borderRadius: 6,
+                    backgroundColor: isCorrectAnswer ? "rgba(34,197,94,0.15)" : userAnswer === opt ? "rgba(239,68,68,0.15)" : "transparent",
+                  }}>
+                    {opt}
+                    {isCorrectAnswer && <span style={{ marginLeft: 8, color: "var(--success)" }}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <button className="btn secondary" onClick={onExit}>Zurück</button>
+    </div>
+  );
+}

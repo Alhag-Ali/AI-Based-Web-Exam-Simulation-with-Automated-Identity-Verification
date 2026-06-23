@@ -179,3 +179,22 @@ class MockExam(models.Model):
 
     def __str__(self):
         return f"{self.plan.title} — {self.title}"
+
+
+class MockExamAttempt(models.Model):
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='mock_exam_attempts',
+    )
+    mock_exam = models.ForeignKey(MockExam, on_delete=models.CASCADE, related_name='attempts')
+    correct = models.IntegerField(default=0)
+    total = models.IntegerField(default=0)
+    score_pct = models.IntegerField(default=0)
+    completed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-completed_at']
+
+    def __str__(self):
+        return f"{self.student.email} — {self.mock_exam.title} ({self.score_pct}%)"

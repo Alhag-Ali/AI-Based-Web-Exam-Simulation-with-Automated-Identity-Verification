@@ -1291,10 +1291,13 @@ def professor_dashboard(request):
             "students": student_list,
         })
 
+    from .dashboard_views import professor_class_insights
+
     return Response({
         "total_exams": len(exam_list),
         "total_participants": total_participants,
         "exams": exam_list,
+        **professor_class_insights(request.user),
     })
 
 
